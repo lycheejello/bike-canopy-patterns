@@ -16,10 +16,14 @@ var waveWidth = 0.35    // fraction of body length the bright band spans
 var speed = 0.15        // body-lengths per second
 var t = 0
 
-// UI controls — appear as sliders/picker in the Pixelblaze editor and over the API
+// UI controls — appear as sliders in the Pixelblaze editor and over the API.
+// NOTE: no hsvPicker control here on purpose — an exported hsvPicker* is
+// auto-invoked at load with its default (hue 0 = red), which would clobber the
+// green default above. If you add a color control later, give it a neutral
+// position that reproduces bodyHue = 0.33, e.g. treat the picker hue as an
+// offset:  export function hsvPickerColor(h) { bodyHue = (0.33 + h) % 1 }
 export function sliderSpeed(v)     { speed = 0.02 + v * 0.6 }
 export function sliderWaveWidth(v) { waveWidth = 0.10 + v * 0.6 }
-export function hsvPickerColor(h)  { bodyHue = h }
 
 export function beforeRender(delta) {
   t = (t + delta / 1000 * speed) % 1     // advance the wave crest, wrapped 0..1
