@@ -9,6 +9,8 @@
 //   - 8 longitudinal body stringers, 45 px each = 360 body px  (indices 0..359)
 //   - 2 eye clusters, 16 px each (4x4)       = 32 eye px       (indices 360..391)
 //   - Body tapers head(12" dia) -> mid(28" dia) -> tail(12" dia) over ~72".
+//   - Stringers wrap the TOP + SIDES only, over a 270deg arc, leaving an open
+//     belly (BOTTOM_GAP) where the bike frame/wheels/rider sit. No bottom strand.
 //   - z runs 0.0 (head) -> 1.0 (tail) after normalization, so patterns can use
 //     render3D's z axis directly for head->tail waves (peristalsis).
 //
@@ -25,12 +27,18 @@ function (pixelCount) {
   var HEAD_FWD = 12        // eyes cantilever this far forward of the head
   var EYE_HALF = 3         // half-size of a 4x4 eye grid, inches
   var EYE_OFFSET = 4       // left/right offset of each eye from centerline
+  var BOTTOM_GAP = 90      // degrees of open belly at the bottom (bike sits here)
 
   var map = []
 
-  // --- body: 8 stringers wrapped around a tapering circular cross-section ---
+  // --- body: 8 stringers over the top + sides, open belly at the bottom ---
+  // Sweep symmetric about straight-up (+y = 90deg); leave BOTTOM_GAP open at the
+  // bottom. End stringers land just above the gap on each lower side.
+  var arc = 360 - BOTTOM_GAP                    // degrees the stringers span
   for (var s = 0; s < STRINGERS; s++) {
-    var ang = s * (2 * Math.PI / STRINGERS)
+    var frac = s / (STRINGERS - 1)             // 0..1 across the arc
+    var deg = 90 - arc / 2 + frac * arc        // 90 = top
+    var ang = deg * Math.PI / 180
     for (var i = 0; i < PX_PER_STRINGER; i++) {
       var t = i / (PX_PER_STRINGER - 1)        // 0 head -> 1 tail
       var z = t * LENGTH

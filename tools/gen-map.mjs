@@ -20,12 +20,16 @@ const R_MID = 14; // radius at mid-body bulge (28" diameter)
 const HEAD_FWD = 12; // eyes cantilever this far forward of the head
 const EYE_HALF = 3; // half-size of a 4x4 eye grid, inches
 const EYE_OFFSET = 4; // left/right offset of each eye from centerline
+const BOTTOM_GAP = 90; // degrees of open belly at the bottom (bike sits here)
 
 const map = [];
 
-// body
+// body: stringers over top + sides, open belly at the bottom
+const arc = 360 - BOTTOM_GAP;
 for (let s = 0; s < STRINGERS; s++) {
-  const ang = s * ((2 * Math.PI) / STRINGERS);
+  const frac = s / (STRINGERS - 1);
+  const deg = 90 - arc / 2 + frac * arc; // 90 = top
+  const ang = (deg * Math.PI) / 180;
   for (let i = 0; i < PX_PER_STRINGER; i++) {
     const t = i / (PX_PER_STRINGER - 1);
     const z = t * LENGTH;
