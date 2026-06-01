@@ -1,0 +1,11 @@
+# node
+node_modules/
+npm-debug.log*
+
+# os / editor
+.DS_Store
+*.swp
+
+# emulator scratch / local device backups (commit deliberately, not in bulk)
+backup/
+*.local.json
