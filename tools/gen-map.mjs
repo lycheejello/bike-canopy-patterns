@@ -17,9 +17,10 @@ const PX_PER_STRINGER = 45;
 const LENGTH = 72; // inches, head to tail
 const R_END = 6; // radius at head & tail (12" diameter)
 const R_MID = 14; // radius at mid-body bulge (28" diameter)
-const HEAD_FWD = 12; // eyes cantilever this far forward of the head
-const EYE_HALF = 3; // half-size of a 4x4 eye grid, inches
-const EYE_OFFSET = 4; // left/right offset of each eye from centerline
+const HEAD_FWD = 8; // eyes cantilever this far forward of the head
+const EYE_HALF = 1.5; // half-size of a 4x4 eye grid, inches
+const EYE_OFFSET = 2.5; // left/right offset of each eye from centerline
+const EYE_Y = 2; // vertical centre of the eye grids (grub-y)
 const BOTTOM_GAP = 90; // degrees of open belly at the bottom (bike sits here)
 
 const map = [];
@@ -43,7 +44,7 @@ for (const cx of [-EYE_OFFSET, EYE_OFFSET]) {
   for (let gy = 0; gy < 4; gy++) {
     for (let gx = 0; gx < 4; gx++) {
       const ex = cx + (gx / 3 - 0.5) * 2 * EYE_HALF;
-      const ey = R_END + (gy / 3 - 0.5) * 2 * EYE_HALF;
+      const ey = EYE_Y + (gy / 3 - 0.5) * 2 * EYE_HALF;
       map.push([ex, ey, -HEAD_FWD]);
     }
   }

@@ -24,9 +24,10 @@ function (pixelCount) {
   var LENGTH = 72          // inches, head to tail
   var R_END = 6            // radius at head & tail (12" diameter)
   var R_MID = 14           // radius at mid-body bulge (28" diameter)
-  var HEAD_FWD = 12        // eyes cantilever this far forward of the head
-  var EYE_HALF = 3         // half-size of a 4x4 eye grid, inches
-  var EYE_OFFSET = 4       // left/right offset of each eye from centerline
+  var HEAD_FWD = 8         // eyes cantilever this far forward of the head
+  var EYE_HALF = 1.5       // half-size of a 4x4 eye grid, inches
+  var EYE_OFFSET = 2.5     // left/right offset of each eye from centerline
+  var EYE_Y = 2            // vertical centre of the eye grids (grub-y)
   var BOTTOM_GAP = 90      // degrees of open belly at the bottom (bike sits here)
 
   var map = []
@@ -54,7 +55,7 @@ function (pixelCount) {
     for (var gy = 0; gy < 4; gy++) {
       for (var gx = 0; gx < 4; gx++) {
         var ex = eyeCenters[e] + (gx / 3 - 0.5) * 2 * EYE_HALF
-        var ey = R_END + (gy / 3 - 0.5) * 2 * EYE_HALF
+        var ey = EYE_Y + (gy / 3 - 0.5) * 2 * EYE_HALF
         map.push([ex, ey, -HEAD_FWD])
       }
     }
