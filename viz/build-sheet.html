@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Grub bike — build sheet / cut list</title>
+<style>
+  html,body { margin:0; min-height:100%; background:#0b0d10; color:#cdd6e0; font:13px/1.5 ui-monospace,Menlo,monospace; }
+  header { display:flex; align-items:center; gap:14px; padding:12px 16px; border-bottom:1px solid #2a313c; position:sticky; top:0; background:#0b0d10; z-index:5; }
+  header h1 { font-size:14px; margin:0; color:#8fd6a0; }
+  button { font:inherit; background:#1a212b; color:#cdd6e0; border:1px solid #2f3a47; border-radius:6px; padding:5px 10px; cursor:pointer; }
+  button.on { background:#2b6a44; border-color:#3c8a5b; color:#eafff0; }
+  .wrap { padding:16px; max-width:1000px; }
+  canvas { background:#0e1217; border:1px solid #222b36; border-radius:6px; width:100%; height:auto; display:block; }
+  h2 { color:#9fb0c2; font-size:12px; text-transform:uppercase; letter-spacing:.08em; margin:22px 0 6px; border-bottom:1px solid #1c2430; padding-bottom:4px; }
+  table { border-collapse:collapse; width:100%; font-size:12.5px; }
+  th,td { text-align:left; padding:5px 10px; border-bottom:1px solid #19202a; }
+  th { color:#7d8794; font-weight:normal; }
+  td.q { color:#8fd6a0; white-space:nowrap; }
+  .warn { color:#e0a84e; }
+  .note { color:#6b7480; font-size:11px; margin-top:6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>GRUB BIKE — build sheet</h1>
+  <div id="picker"></div>
+  <span class="note" id="sub"></span>
+</header>
+<div class="wrap">
+  <canvas id="cv" width="960" height="380"></canvas>
+  <h2>Cut list</h2>
+  <table id="cut"><thead><tr><th>Part</th><th>Qty</th><th>Cut / size</th><th>Material · notes</th></tr></thead><tbody></tbody></table>
+  <div class="note" id="footnote"></div>
+</div>
+<script>
+// ─── geometry — keep in sync with tools/gen-map.mjs ───────────────────────
+const STRINGERS=8, PX=45, DENSITY=30, BOTTOM_GAP=90, arc=360-BOTTOM_GAP, GAP=3.5, HOOPS=6;
+const GRUBS = {
+  parent:{ label:"Parent (L) · men's 22\"", rEnd:6, rMid:14, len:72, headFwd:12, tail:18 },
+  baby:  { label:"Baby (XS) · low-step 14\"", rEnd:5, rMid:11, len:60, headFwd:9,  tail:13 },
+};
+const radiusAt=(t,g)=>g.rEnd+(g.rMid-g.rEnd)*Math.sin(Math.PI*t);
+let key='parent';
+const HOOP_SIZES=[10,12,14,16,18,20,24,28,32];
+const nearest=d=>HOOP_SIZES.reduce((a,b)=>Math.abs(b-d)<Math.abs(a-d)?b:a);
+
+// numeric arc length of a stringer along the tapering hull
+function stringerArc(g){ const N=200; let L=0; const amp=(g.rMid-g.rEnd)*Math.PI;
+  let prev=null;
+  for (let i=0;i<=N;i++){ const t=i/N, z=t*g.len, r=radiusAt(t,g);
+    if(prev) L+=Math.hypot(z-prev.z, r-prev.r); prev={z,r}; }
+  return L;
+}
+// lateral cloth area (270° tapered tube), in² ; ∫ 0.75·2πr dz
+function clothArea(g){ const N=200; let A=0; const frac=(360-BOTTOM_GAP)/360;
+  for (let i=0;i<N;i++){ const t=(i+0.5)/N, r=radiusAt(t,g); A += frac*2*Math.PI*r*(g.len/N); }
+  return A;
+}
+
+function render(){
+  const g=GRUBS[key];
+  // stations + diameters
+  const stations=[]; for(let h=0;h<HOOPS;h++) stations.push(h/(HOOPS-1));
+  const dias=stations.map(t=>({t, raw:2*radiusAt(t,g), buy:nearest(2*radiusAt(t,g))}));
+
+  // ── profile drawing (side view) ──
+  const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+  const W=cv.width, H=cv.height; ctx.clearRect(0,0,W,H);
+  const padL=70, padR=70, padT=40;
+  const totalZ=g.headFwd+g.len+g.tail;
+  const sx=(W-padL-padR)/totalZ;                  // px per inch (horizontal)
+  const cyc=H*0.5;                                 // centreline y
+  const sy=Math.min(sx, (H*0.32)/g.rMid);          // px per inch (vertical), capped
+  const X=z=>padL + (z+g.headFwd)*sx;              // z measured from head (0..len), head cantilever negative
+  const Yt=r=>cyc - r*sy, Yb=r=>cyc + r*sy;
+
+  // centreline
+  ctx.strokeStyle='#27313d'; ctx.setLineDash([6,5]); ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(padL-20,cyc); ctx.lineTo(W-padR+20,cyc); ctx.stroke(); ctx.setLineDash([]);
+
+  // hull silhouette: top solid, belly dashed (open)
+  ctx.lineWidth=2;
+  ctx.strokeStyle='#4caf6a'; ctx.beginPath();
+  for(let i=0;i<=100;i++){ const t=i/100, x=X(t*g.len), y=Yt(radiusAt(t,g)); i?ctx.lineTo(x,y):ctx.moveTo(x,y); } ctx.stroke();
+  ctx.strokeStyle='#3c6b4d'; ctx.setLineDash([5,4]); ctx.beginPath();
+  for(let i=0;i<=100;i++){ const t=i/100, x=X(t*g.len), y=Yb(radiusAt(t,g)); i?ctx.lineTo(x,y):ctx.moveTo(x,y); } ctx.stroke(); ctx.setLineDash([]);
+
+  // hoop stations
+  ctx.font='10px ui-monospace';
+  for(const d of dias){ const x=X(d.t*g.len), r=radiusAt(d.t,g);
+    ctx.strokeStyle='#2f6a8f'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(x,Yt(r)); ctx.lineTo(x,Yb(r)); ctx.stroke();
+    ctx.fillStyle='#7fb6d6'; ctx.save(); ctx.translate(x, Yt(r)-6); ctx.fillText(`Ø${d.buy}"`, -10, 0); ctx.restore();
+  }
+
+  // head sphere + cantilever, tail extension
+  ctx.strokeStyle='#e0a84e'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(X(-g.headFwd), cyc, g.rEnd*sy*0.7, 0, 7); ctx.stroke();   // head/eyes
+  ctx.beginPath(); ctx.moveTo(X(-g.headFwd),cyc); ctx.lineTo(X(2),cyc); ctx.stroke();
+  ctx.strokeStyle='#8a939e'; ctx.beginPath(); ctx.moveTo(X(g.len),cyc); ctx.lineTo(X(g.len+g.tail),cyc); ctx.stroke();
+
+  // dimension line (total body length)
+  ctx.strokeStyle='#5b6470'; ctx.fillStyle='#9fb0c2'; ctx.lineWidth=1;
+  const dy=H-22;
+  ctx.beginPath(); ctx.moveTo(X(0),dy); ctx.lineTo(X(g.len),dy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(X(0),dy-4); ctx.lineTo(X(0),dy+4); ctx.moveTo(X(g.len),dy-4); ctx.lineTo(X(g.len),dy+4); ctx.stroke();
+  ctx.fillText(`body ${g.len}"`, (X(0)+X(g.len))/2-22, dy-6);
+  ctx.fillStyle='#6b7480';
+  ctx.fillText(`head +${g.headFwd}"`, X(-g.headFwd)-4, dy-6);
+  ctx.fillText(`tail +${g.tail}"`, X(g.len)+6, dy-6);
+
+  // ── cut list ──
+  const arcLen=stringerArc(g), pipe=Math.ceil(arcLen+4);
+  const stripPerStringer=PX/DENSITY*39.37;        // inches of LED strip (45px @30/m)
+  const ledTotal=(stripPerStringer*STRINGERS/39.37).toFixed(2);
+  const cloth=clothArea(g), clothYd=(cloth/(58*36)).toFixed(2);
+  const hoopBuy={}; for(const d of dias) hoopBuy[d.buy]=(hoopBuy[d.buy]||0)+1;
+  const hoopStr=Object.entries(hoopBuy).map(([d,n])=>`${n}× Ø${d}"`).join(', ');
+
+  const rows=[
+    ['PVC stringer', `${STRINGERS}`, `${pipe}" each`, `½" Sch 40 · arc path ≈ ${arcLen.toFixed(0)}" + mount allowance`],
+    ['Hoop rib', `${HOOPS}`, hoopStr, `hula hoops, cut ~90° out for belly clearance`],
+    ['Standoff', `${STRINGERS*HOOPS}`, `${GAP}" each`, `½" PVC stub or printed bracket · sets LED→cloth gap`],
+    ['LED strip (body)', `${STRINGERS}`, `${stripPerStringer.toFixed(0)}" (${(stripPerStringer/39.37).toFixed(2)}m) each`, `WS2815 ${DENSITY}/m · ${ledTotal}m total for this bike`],
+    ['Cloth skin', '1', `${clothYd} yd of 58"`, `4-way stretch · ${(cloth/144).toFixed(1)} ft² lateral · buy ~2× for seams/flaps`],
+    ['Head cantilever arm', '1', `~${g.headFwd+4}"`, `½" PVC off head tube · carries head + eyes`],
+    ['Tail extension', '1', `${g.tail}" + plate`, `1" square aluminium tube + plywood/coroplast deck → rear rack`],
+    ['Bike mounts', '4', '—', `head-tube U-bolt, top-tube saddle, seat-tube, rear-rack`],
+  ];
+  const tb=document.querySelector('#cut tbody'); tb.innerHTML='';
+  for(const [p,q,c,n] of rows){ const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${p}</td><td class="q">${q}</td><td class="q">${c}</td><td>${n}</td>`; tb.appendChild(tr); }
+
+  // footnote: flag the strip-vs-path-length gap
+  const fn=document.getElementById('footnote');
+  const shortBy=(arcLen-stripPerStringer).toFixed(0);
+  fn.innerHTML = `<span class="warn">⚠ check:</span> 45 px @ ${DENSITY}/m = ${stripPerStringer.toFixed(0)}" of strip, but the stringer path is ≈ ${arcLen.toFixed(0)}" — `+
+    `the LED zone falls ~${shortBy}" short of the full body. Either bump to ${Math.ceil(PX/(arcLen/39.37))}/m density (≈${Math.ceil(arcLen/39.37*DENSITY)} px to fill), `+
+    `add pixels, or accept an unlit margin at head/tail. The pixel map currently stretches 45 px over the full ${g.len}".`;
+  document.getElementById('sub').textContent = `${g.label} · max Ø ${2*g.rMid}" · ${HOOPS} ribs`;
+  document.querySelectorAll('#picker button').forEach(x=>x.classList.toggle('on',x.dataset.k===key));
+}
+
+const picker=document.getElementById('picker');
+for(const k of Object.keys(GRUBS)){ const b=document.createElement('button'); b.textContent=GRUBS[k].label; b.dataset.k=k; b.onclick=()=>{key=k;render();}; picker.appendChild(b); }
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Grub bike — viewers</title>
+<style>
+  :root { color-scheme:dark; }
+  html,body { margin:0; min-height:100%; background:#0b0d10; color:#cdd6e0;
+              font:14px/1.55 ui-monospace,Menlo,monospace; }
+  .wrap { max-width:880px; margin:0 auto; padding:32px 20px 60px; }
+  h1 { font-size:18px; color:#8fd6a0; margin:0 0 4px; }
+  .sub { color:#6b7480; font-size:12px; margin-bottom:24px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:14px; }
+  a.card { display:block; text-decoration:none; color:inherit; background:#11151b;
+           border:1px solid #232c38; border-radius:10px; padding:16px 16px 14px;
+           transition:border-color .12s, transform .12s, background .12s; }
+  a.card:hover { border-color:#3c8a5b; background:#141a21; transform:translateY(-2px); }
+  .card h2 { font-size:14px; margin:0 0 6px; color:#dfe9f5; }
+  .card .tag { font-size:10px; letter-spacing:.08em; text-transform:uppercase;
+               color:#7d8794; border:1px solid #2a313c; border-radius:4px; padding:1px 6px; margin-left:6px; vertical-align:middle; }
+  .card p { margin:0; color:#9fb0c2; font-size:12.5px; }
+  .card .glyph { font-size:22px; line-height:1; margin-bottom:8px; }
+  .note { color:#6b7480; font-size:11.5px; margin-top:26px; border-top:1px solid #1c2430; padding-top:14px; }
+  code { color:#8fd6a0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Grub bike — viewers</h1>
+  <div class="sub">8-Bit Bunny · Burning Man 2026 · all share the geometry in <code>tools/gen-map.mjs</code></div>
+  <div class="grid" id="grid"></div>
+  <div class="note">
+    Planning, gear, and the build schedule live in the Obsidian vault, not here:
+    <code>~/Develop/burningman/Projects/LED Bikes - Pixelblaze.md</code>.<br>
+    3D viewers load three.js from a CDN (need network / the http server);
+    <code>diffusion.html</code> is pure canvas and also runs from <code>file://</code>.
+  </div>
+</div>
+<script>
+const VIEWERS = [
+  { f:'grub-bike.html',    g:'🚲', tag:'3D · fit',   h:'Fit check',
+    d:'Grub hull + head + LEDs over each candidate bike. Surfaces belly-to-ground clearance per frame; eye/head sliders feed the pixel map.' },
+  { f:'construction.html', g:'🧩', tag:'3D · build',  h:'Construction / assembly',
+    d:'Hoop ribs, PVC stringers, the standoffs that set the LED→cloth gap, cloth skin, bike + mount points. Explode, section cut, layer toggles.' },
+  { f:'rib-detail.html',   g:'⊙',  tag:'2D · detail', h:'Rib / standoff detail',
+    d:'One hoop station in cross-section — the standoff + gap junction. Slide the station from head through the mid-body bulge to tail.' },
+  { f:'joint.html',        g:'🔩', tag:'3D · joint',  h:'Strut joint (zoom)',
+    d:'Zoomed single joint: stringer, LED on top, strut bolted to the side, hoop above. Spin it to see how the strut clears the LED. No zip ties.' },
+  { f:'build-sheet.html',  g:'📐', tag:'2D · shop',   h:'Build sheet / cut list',
+    d:'Side-profile shop drawing plus a live cut list: PVC stringer lengths, nearest-stock hoop diameters, standoff count, cloth yardage.' },
+  { f:'diffusion.html',    g:'💡', tag:'2D · optics', h:'Diffusion gap test',
+    d:'Simulates LED light through the spandex. Reports along-strip and between-stringer ripple so you can find the gap where dots/stripes blend.' },
+  { f:'http://localhost:5173/', ext:true, g:'🟢', tag:'pb_emu · :5173', h:'Pattern emulator',
+    d:'pb_emu — runs the actual Pixelblaze patterns live in 3D on the grub map, no hardware. Load maps/grub-3d.json + a pattern. Needs its dev server: npm run dev in pixelblaze-pattern-emulator.' },
+];
+const grid=document.getElementById('grid');
+for (const v of VIEWERS){
+  const a=document.createElement('a'); a.className='card'; a.href=v.ext?v.f:v.f;
+  if (v.ext){ a.target='_blank'; a.rel='noopener'; }
+  const ext = v.ext ? ' ↗' : '';
+  a.innerHTML=`<div class="glyph">${v.g}</div><h2>${v.h}${ext}<span class="tag">${v.tag}</span></h2><p>${v.d}</p>`;
+  grid.appendChild(a);
+}
+</script>
+</body>
+</html>

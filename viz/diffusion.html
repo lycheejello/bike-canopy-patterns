@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LED-through-cloth diffusion — gap test</title>
+<style>
+  html,body { margin:0; height:100%; background:#0b0d10; color:#cdd6e0;
+              font:13px/1.5 ui-monospace,Menlo,monospace; overflow:hidden; }
+  #hud { position:fixed; top:10px; left:10px; z-index:10; background:rgba(12,14,18,.86);
+         border:1px solid #2a313c; border-radius:8px; padding:10px 12px; max-width:330px; }
+  #hud h1 { font-size:13px; margin:0 0 6px; color:#8fd6a0; }
+  #hud button { font:inherit; background:#1a212b; color:#cdd6e0; border:1px solid #2f3a47;
+                border-radius:6px; padding:4px 8px; margin:2px 4px 6px 0; cursor:pointer; }
+  #hud button.on { background:#2b6a44; border-color:#3c8a5b; color:#eafff0; }
+  #sliders label { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  #sliders label span:first-child { width:88px; color:#7d8794; }
+  #sliders input { flex:1; }
+  #sliders label span:last-child { width:48px; text-align:right; color:#8fd6a0; }
+  #metrics { border-top:1px solid #2a313c; margin-top:8px; padding-top:8px; }
+  #metrics .row { display:flex; justify-content:space-between; gap:14px; }
+  #metrics .k { color:#7d8794; }
+  #verdict { margin-top:6px; font-weight:bold; }
+  .ok { color:#8fd6a0; } .meh { color:#e0c050; } .bad { color:#e0705a; }
+  #hud .note { color:#6b7480; margin-top:8px; font-size:11px; }
+  .toggles { border-top:1px solid #2a313c; margin-top:8px; padding-top:6px; }
+  #stage { position:fixed; inset:0; display:grid; place-items:center; }
+  canvas#view { image-rendering:auto; border:1px solid #222b36; box-shadow:0 0 40px #000 inset; }
+  #scale { position:fixed; bottom:14px; right:16px; color:#7d8794; font-size:11px; text-align:right; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <h1>LED → CLOTH — diffusion gap test</h1>
+  <div id="presets"></div>
+  <div id="sliders"></div>
+  <div class="toggles" id="toggles"></div>
+  <div id="metrics">
+    <div class="row"><span class="k">LED pitch (along strip)</span><span id="m-along"></span></div>
+    <div class="row"><span class="k">along-strip ripple</span><span id="m-rA"></span></div>
+    <div class="row"><span class="k">between-stringer ripple</span><span id="m-rB"></span></div>
+    <div id="verdict"></div>
+  </div>
+  <div class="note">Simulated illuminance on the cloth as seen from outside (point-source
+    1/r² + cloth scatter). White spandex over WS2815. <b>Ripple</b> = brightness I'd see
+    between a bright spot and the dark valley next to it: under ~8% reads smooth, over ~25%
+    reads as visible dots/stripes. 8 stringers over a 270° arc → pitch ≈ <b>4″ at the
+    6″-radius ends</b>, ≈ <b>9.4″ at the 14″ mid-body</b>.</div>
+</div>
+<div id="stage"><canvas id="view"></canvas></div>
+<div id="scale"></div>
+<script>
+// ─── parameters (live) ──────────────────────────────────────────────────────
+const P = {
+  gap:      3.5,   // LED → cloth distance, inches
+  density:  30,    // LEDs per metre along a strip
+  pitch:    9.4,   // centre-to-centre spacing between adjacent stringers, inches
+  scatter:  0.4,   // cloth subsurface scatter (gaussian sigma, inches)
+  exposure: 1.0,   // display brightness multiplier (metric-independent)
+  hue:      150,   // colour, degrees
+  sat:      0,     // 0 = white
+};
+let showLEDs = false, smooth = true;
+
+const RES = 6;              // sim pixels per inch
+const KGRID = 7;            // ± LEDs each way included in the field sum
+const cv = document.getElementById('view');
+const ctx = cv.getContext('2d');
+const off = document.createElement('canvas');
+const octx = off.getContext('2d');
+
+const hsv2rgb = (h,s,v) => {
+  h=(h%360)/60; const c=v*s, x=c*(1-Math.abs(h%2-1)), m=v-c;
+  const t=[[c,x,0],[x,c,0],[0,c,x],[0,x,c],[x,0,c],[c,0,x]][Math.floor(h)%6];
+  return [(t[0]+m)*255,(t[1]+m)*255,(t[2]+m)*255];
+};
+
+function gaussianBlur(buf, n, sigmaPx){          // separable, in-place via temp
+  if (sigmaPx < 0.3) return buf;
+  const r = Math.ceil(sigmaPx*3), k=[]; let ksum=0;
+  for (let i=-r;i<=r;i++){ const w=Math.exp(-(i*i)/(2*sigmaPx*sigmaPx)); k.push(w); ksum+=w; }
+  for (let i=0;i<k.length;i++) k[i]/=ksum;
+  const pass = (src) => {
+    const out = new Float32Array(n*n);
+    for (let y=0;y<n;y++) for (let x=0;x<n;x++){
+      let s=0; for (let i=-r;i<=r;i++){ const xx=Math.min(n-1,Math.max(0,x+i)); s+=src[y*n+xx]*k[i+r]; }
+      out[y*n+x]=s;
+    }
+    // transpose-reuse: run again on columns by swapping axes
+    const out2 = new Float32Array(n*n);
+    for (let y=0;y<n;y++) for (let x=0;x<n;x++){
+      let s=0; for (let i=-r;i<=r;i++){ const yy=Math.min(n-1,Math.max(0,y+i)); s+=out[yy*n+x]*k[i+r]; }
+      out2[y*n+x]=s;
+    }
+    return out2;
+  };
+  return pass(buf);
+}
+
+function render(){
+  const along = 1000/P.density/25.4;             // along-strip LED pitch, inches
+  // window auto-sizes so one full stringer-pitch period is always visible, centred
+  const span = Math.min(30, Math.max(14, 2.4*P.pitch, 6*along));
+  const n = Math.round(span*RES);
+  off.width = off.height = n;
+  const cx = span/2, cy = span/2;                 // an LED sits dead-centre
+
+  // LED positions: grid centred on (cx,cy)
+  const leds=[];
+  for (let k=-KGRID;k<=KGRID;k++) for (let m=-KGRID;m<=KGRID;m++)
+    leds.push([cx + k*along, cy + m*P.pitch]);
+
+  // illuminance field on the cloth plane: E = Σ gap / r³  (cosθ·1/r²)
+  const raw = new Float32Array(n*n);
+  for (let j=0;j<n;j++){ const wy=j/RES;
+    for (let i=0;i<n;i++){ const wx=i/RES; let e=0;
+      for (const [lx,ly] of leds){ const dx=wx-lx, dy=wy-ly, r2=dx*dx+dy*dy+P.gap*P.gap; e += P.gap/(r2*Math.sqrt(r2)); }
+      raw[j*n+i]=e;
+    }
+  }
+  const buf = gaussianBlur(raw, n, P.scatter*RES);
+
+  // ── metrics: Michelson ripple over one period through the centre LED ──
+  const ripple = (samples) => { const mx=Math.max(...samples), mn=Math.min(...samples);
+                                 return mx+mn>0 ? 100*(mx-mn)/(mx+mn) : 0; };
+  const ic = Math.round(cx*RES), jc = Math.round(cy*RES);
+  const alongLine=[]; for (let i=ic; i<=Math.min(n-1, ic+Math.round(along*RES)); i++) alongLine.push(buf[jc*n+i]);
+  const acrossLine=[]; for (let j=jc; j<=Math.min(n-1, jc+Math.round(P.pitch*RES)); j++) acrossLine.push(buf[j*n+ic]);
+  const rA = ripple(alongLine), rB = ripple(acrossLine);
+
+  // ── colourise ──
+  let max=0; for (let p=0;p<buf.length;p++) if (buf[p]>max) max=buf[p];
+  const norm = max>0 ? P.exposure/max : 0;
+  const [cr,cg,cb] = hsv2rgb(P.hue, P.sat, 1);
+  const img = octx.createImageData(n,n);
+  for (let p=0;p<buf.length;p++){
+    let v = Math.pow(Math.min(1, buf[p]*norm), 1/2.2);   // gamma
+    img.data[p*4]=cr*v; img.data[p*4+1]=cg*v; img.data[p*4+2]=cb*v; img.data[p*4+3]=255;
+  }
+  octx.putImageData(img,0,0);
+
+  // ── draw scaled to screen ──
+  const disp = Math.min(innerWidth, innerHeight) * 0.82 | 0;
+  cv.width = cv.height = disp;
+  ctx.imageSmoothingEnabled = smooth;
+  ctx.clearRect(0,0,disp,disp);
+  ctx.drawImage(off, 0, 0, disp, disp);
+  if (showLEDs){
+    ctx.fillStyle='rgba(255,80,80,.9)'; const s=disp/span;
+    for (const [lx,ly] of leds){ const px=lx*s, py=ly*s;
+      if (px<0||py<0||px>disp||py>disp) continue;
+      ctx.beginPath(); ctx.arc(px,py,2,0,7); ctx.fill(); }
+  }
+
+  // ── HUD ──
+  document.getElementById('m-along').textContent = `${(along*25.4).toFixed(0)}mm / ${along.toFixed(2)}″`;
+  const tag = (r,el) => { const e=document.getElementById(el);
+    e.textContent = r.toFixed(0)+'%'; e.className = r<8?'ok':r<25?'meh':'bad'; };
+  tag(rA,'m-rA'); tag(rB,'m-rB');
+  const worst = Math.max(rA,rB);
+  const v=document.getElementById('verdict');
+  if (worst<8){ v.textContent='✓ smooth glow'; v.className='ok'; }
+  else if (worst<25){ v.textContent='~ faintly structured'; v.className='meh'; }
+  else { v.textContent = rB>rA ? '✗ visible stringer stripes' : '✗ visible LED dots'; v.className='bad'; }
+  document.getElementById('scale').textContent = `view ≈ ${span.toFixed(0)}″ square · gap ${P.gap}″ · ${P.density}/m`;
+}
+
+// ─── presets ────────────────────────────────────────────────────────────────
+const PRESETS = {
+  'mid-body (9.4″)':  { pitch:9.4 },
+  'body ends (4″)':   { pitch:4 },
+  'single strip':     { pitch:40 },
+};
+const pbox = document.getElementById('presets');
+for (const name of Object.keys(PRESETS)){
+  const b=document.createElement('button'); b.textContent=name;
+  b.onclick=()=>{ Object.assign(P, PRESETS[name]); syncSliders(); render(); };
+  pbox.appendChild(b);
+}
+
+// ─── sliders ──────────────────────────────────────────────────────────────
+const SLIDERS = [  // [label, key, min, max, step, fmt]
+  ['gap (in)',     'gap',      0.5, 6,   0.25, v=>v+'″'],
+  ['density /m',   'density',  20,  144, 1,    v=>v],
+  ['stringer pitch','pitch',   1,   40,  0.2,  v=>v+'″'],
+  ['cloth scatter','scatter',  0,   2,   0.05, v=>v+'″'],
+  ['exposure',     'exposure', 0.2, 3,   0.05, v=>v.toFixed(2)],
+  ['hue',          'hue',      0,   360, 1,    v=>v],
+  ['saturation',   'sat',      0,   1,   0.05, v=>v.toFixed(2)],
+];
+const slBox=document.getElementById('sliders'); const inputs={};
+for (const [label,key,min,max,step,fmt] of SLIDERS){
+  const l=document.createElement('label');
+  const s1=document.createElement('span'); s1.textContent=label;
+  const inp=document.createElement('input'); inp.type='range'; inp.min=min; inp.max=max; inp.step=step; inp.value=P[key];
+  const s2=document.createElement('span'); s2.textContent=fmt(P[key]);
+  inp.oninput=()=>{ P[key]=parseFloat(inp.value); s2.textContent=fmt(P[key]); render(); };
+  inputs[key]={inp,s2,fmt}; l.append(s1,inp,s2); slBox.appendChild(l);
+}
+function syncSliders(){ for (const k in inputs){ inputs[k].inp.value=P[k]; inputs[k].s2.textContent=inputs[k].fmt(P[k]); } }
+
+// ─── toggles ──────────────────────────────────────────────────────────────
+const tbox=document.getElementById('toggles');
+const mkToggle=(label,get,set)=>{ const b=document.createElement('button');
+  const paint=()=>b.classList.toggle('on',get()); b.textContent=label;
+  b.onclick=()=>{ set(!get()); paint(); render(); }; paint(); tbox.appendChild(b); };
+mkToggle('show LEDs', ()=>showLEDs, v=>showLEDs=v);
+mkToggle('cloth blur', ()=>smooth, v=>smooth=v);
+
+addEventListener('resize', render);
+render();
+</script>
+</body>
+</html>

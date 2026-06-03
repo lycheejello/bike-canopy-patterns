@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Grub bike — strut joint (zoom)</title>
+<style>
+  html,body { margin:0; height:100%; background:#0b0d10; color:#cdd6e0; font:13px/1.5 ui-monospace,Menlo,monospace; }
+  #hud { position:fixed; top:10px; left:10px; z-index:10; background:rgba(12,14,18,.84);
+         border:1px solid #2a313c; border-radius:8px; padding:10px 12px; max-width:320px; }
+  #hud h1 { font-size:13px; margin:0 0 6px; color:#8fd6a0; }
+  #hud button { font:inherit; background:#1a212b; color:#cdd6e0; border:1px solid #2f3a47; border-radius:6px; padding:4px 8px; margin:2px 4px 6px 0; cursor:pointer; }
+  #hud button.on { background:#2b6a44; border-color:#3c8a5b; color:#eafff0; }
+  #sliders label { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  #sliders label span:first-child { width:80px; color:#7d8794; }
+  #sliders input { flex:1; }
+  #sliders label span:last-child { width:40px; text-align:right; color:#8fd6a0; }
+  .legend { border-top:1px solid #2a313c; margin-top:8px; padding-top:8px; }
+  .legend div { margin:2px 0; }
+  .legend span { display:inline-block; width:11px; height:11px; border-radius:2px; margin-right:6px; vertical-align:middle; }
+  #hud .note { color:#6b7480; margin-top:8px; font-size:11px; }
+  canvas { display:block; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+<div id="hud">
+  <h1>STRUT JOINT — zoom (no zip ties)</h1>
+  <div id="buttons"></div>
+  <div id="sliders"></div>
+  <div class="legend">
+    <div><span style="background:#e0a84e"></span>stringer (½" PVC, LED rail)</div>
+    <div><span style="background:#7fe0ff"></span>LED strip — on top, facing cloth</div>
+    <div><span style="background:#c25b5b"></span>strut — ⅜" rod, plugs into drilled holes</div>
+    <div><span style="background:#4caf6a"></span>hoop tube (holds the cloth)</div>
+    <div><span style="background:#b8c0c8"></span>retaining screw at each socket</div>
+  </div>
+  <div class="note">drag = orbit · scroll = zoom. The strut is a <b>rod that plugs into a
+    drilled hole</b> — no coping, no clamp. The hole goes in the <b>side</b> of the stringer
+    so it clears the LED on top. Slide the angle: keep it well onto the side. Same plug-in
+    at the hoop end; lock with epoxy or a screw.</div>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0d10);
+const camera = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 200);
+camera.position.set(7, 5, 9);
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(devicePixelRatio); renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.9, 0);
+scene.add(new THREE.HemisphereLight(0xbfd2e6, 0x141a22, 1.1));
+const dl = new THREE.DirectionalLight(0xffffff, 1.4); dl.position.set(6,10,8); scene.add(dl);
+
+// dims (inches): ½" PVC OD 0.84 → r 0.42
+const R_STR = 0.42, R_STRUT = 0.19, R_HOOP = 0.45;   // strut = ⅜" rod
+const P = { gap:3.5, angle:70 };          // angle = degrees off the top crown (70 = well onto the side)
+let spin = true;
+
+const grp = new THREE.Group(); scene.add(grp);
+const mat = (c,opts={}) => new THREE.MeshStandardMaterial({ color:c, roughness:.55, metalness:opts.metal?.8:.1, emissive:opts.emis||0x000000, emissiveIntensity:opts.ei||0 });
+
+// cylinder spanning two points
+function tube(p1, p2, r, material){
+  const dir = new THREE.Vector3().subVectors(p2, p1); const len = dir.length();
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 24), material);
+  m.position.copy(p1).addScaledVector(dir, 0.5);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.clone().normalize());
+  return m;
+}
+const V = (x,y,z)=>new THREE.Vector3(x,y,z);
+
+function build(){
+  while (grp.children.length) grp.remove(grp.children[0]);
+  const STR_LEN = 10, HOOP_LEN = 7;
+
+  // stringer — along Z, centred at origin
+  grp.add(tube(V(0,0,-STR_LEN/2), V(0,0,STR_LEN/2), R_STR, mat(0xe0a84e)));
+
+  // LED strip on the crown (+Y)
+  const led = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.1, STR_LEN*0.92), mat(0x7fe0ff,{emis:0x2a6a86,ei:1.1}));
+  led.position.set(0, R_STR+0.05, 0); grp.add(led);
+
+  // hoop tube — along X, sitting gap above the crown
+  const hoopY = R_STR + P.gap + R_HOOP;
+  grp.add(tube(V(-HOOP_LEN/2, hoopY, 0), V(HOOP_LEN/2, hoopY, 0), R_HOOP, mat(0x4caf6a)));
+
+  // strut = a rod that PLUGS into a drilled hole on the SIDE of the stringer
+  // (so it clears the LED on the crown) and into a hole in the hoop.
+  // No cope, no clamp — a rod in a round hole self-seats and can't rock.
+  const phi = P.angle*Math.PI/180;
+  const base = V(R_STR*Math.sin(phi), R_STR*Math.cos(phi), 0);   // hole in the side of the pipe
+  const tip  = V(0, hoopY - R_HOOP, 0);                          // hole in the hoop underside
+  const dir = new THREE.Vector3().subVectors(tip, base).normalize();
+  const p1 = base.clone().addScaledVector(dir, -0.22);           // sink ends into each tube
+  const p2 = tip.clone().addScaledVector(dir, 0.22);
+  grp.add(tube(p1, p2, R_STRUT, mat(0xc25b5b)));
+  // tiny retaining screw at each socket
+  for (const pt of [base, tip]){
+    const s = new THREE.Mesh(new THREE.SphereGeometry(0.1,12,8), mat(0xb8c0c8,{metal:true}));
+    s.position.copy(pt); grp.add(s);
+  }
+}
+
+// ── UI ──
+const btns = document.getElementById('buttons');
+const spinBtn = document.createElement('button'); spinBtn.textContent='auto-spin';
+spinBtn.classList.toggle('on', spin); spinBtn.onclick=()=>{ spin=!spin; spinBtn.classList.toggle('on',spin); };
+btns.appendChild(spinBtn);
+
+const SLIDERS = [['strut angle','angle',0,75,1,'°'],['gap','gap',1.5,5,0.25,'"']];
+const slBox = document.getElementById('sliders');
+for (const [label,k,min,max,step,unit] of SLIDERS){
+  const l=document.createElement('label');
+  const s1=document.createElement('span'); s1.textContent=label;
+  const inp=document.createElement('input'); inp.type='range'; inp.min=min; inp.max=max; inp.step=step; inp.value=P[k];
+  const s2=document.createElement('span'); s2.textContent=P[k]+unit;
+  inp.oninput=()=>{ P[k]=parseFloat(inp.value); s2.textContent=P[k]+unit; build(); };
+  l.append(s1,inp,s2); slBox.appendChild(l);
+}
+
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+build();
+(function loop(){ requestAnimationFrame(loop); if(spin) grp.rotation.y+=0.004; controls.update(); renderer.render(scene,camera); })();
+</script>
+</body>
+</html>

@@ -9,3 +9,7 @@ npm-debug.log*
 # emulator scratch / local device backups (commit deliberately, not in bulk)
 backup/
 *.local.json
+
+# python venvs (push-patterns.py tooling) — use Apple python / a --symlinks venv
+.venv*/
+__pycache__/

@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Grub bike — construction / assembly</title>
+<style>
+  html,body { margin:0; height:100%; background:#0b0d10; color:#cdd6e0; font:13px/1.5 ui-monospace,Menlo,monospace; }
+  #hud { position:fixed; top:10px; left:10px; z-index:10; background:rgba(12,14,18,.84);
+         border:1px solid #2a313c; border-radius:8px; padding:10px 12px; max-width:340px; }
+  #hud h1 { font-size:13px; margin:0 0 6px; color:#8fd6a0; }
+  #hud button { font:inherit; background:#1a212b; color:#cdd6e0; border:1px solid #2f3a47;
+                border-radius:6px; padding:4px 8px; margin:2px 4px 6px 0; cursor:pointer; }
+  #hud button.on { background:#2b6a44; border-color:#3c8a5b; color:#eafff0; }
+  #sliders { border-top:1px solid #2a313c; margin-top:6px; padding-top:6px; }
+  #sliders label { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  #sliders label span:first-child { width:78px; color:#7d8794; }
+  #sliders input { flex:1; }
+  #sliders label span:last-child { width:40px; text-align:right; color:#8fd6a0; }
+  #readout { color:#9fb0c2; font-size:11px; margin-top:8px; border-top:1px solid #2a313c; padding-top:6px; white-space:pre-line; }
+  #hud .legend { margin-top:8px; }
+  #hud .legend span { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:middle; }
+  #hud .note { color:#6b7480; margin-top:8px; font-size:11px; }
+  canvas { display:block; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+<div id="hud">
+  <h1>GRUB BIKE — construction</h1>
+  <div id="picker"></div>
+  <div id="layers"></div>
+  <div id="sliders"></div>
+  <div id="readout"></div>
+  <div class="legend">
+    <div><span style="background:#dfe9f5"></span>cloth skin (former = hoops)</div>
+    <div><span style="background:#4caf6a"></span>hoop ribs (270° cut)</div>
+    <div><span style="background:#e0a84e"></span>PVC stringers + LEDs</div>
+    <div><span style="background:#c25b5b"></span>standoffs (set the gap)</div>
+    <div><span style="background:#8a939e"></span>bike + mounts</div>
+  </div>
+  <div class="note">drag = orbit · scroll = zoom · keys 1/2 switch grub.
+    Hoops are the cloth former; stringers stand off <i>inboard</i> by the gap on short
+    standoffs and carry the LEDs. Explode to separate the three shells; section to cut
+    at mid-body.</div>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ─── GRUB GEOMETRY — keep in sync with tools/gen-map.mjs ───────────────────
+const STRINGERS = 8, PX = 45, BOTTOM_GAP = 90, arc = 360 - BOTTOM_GAP;
+const angleOf = s => (90 - arc/2 + (s/(STRINGERS-1)) * arc) * Math.PI/180;
+const radiusAt = (t,g) => g.rEnd + (g.rMid - g.rEnd) * Math.sin(Math.PI * t);
+
+// per-grub: parent rides the men's 22", baby rides the women's low-step 14"
+const GRUBS = {
+  parent: { label:"Parent grub (L)",  len:72, rEnd:6, rMid:14, bike:{ rider:"6'0\"", wheelR:13, wheelbase:43, rearAxleZ:54, saddleY:39, barsY:40, headY:33, bbY:11, lowStep:false } },
+  baby:   { label:"Baby grub (XS)",   len:60, rEnd:5, rMid:11, bike:{ rider:"5'2\"", wheelR:13, wheelbase:41, rearAxleZ:53, saddleY:31, barsY:37, headY:26, bbY:11, lowStep:true  } },
+};
+
+// ─── live params ────────────────────────────────────────────────────────────
+const P = { gap:3.5, hoops:6, explode:0 };
+const show = { cloth:true, hoops:true, stringers:true, standoffs:true, bike:true, head:true };
+let key = 'parent';
+
+// nearest off-the-shelf hula-hoop diameter we'd actually buy
+const HOOP_SIZES = [10,12,14,16,18,20,24,28,32];
+const nearestHoop = d => HOOP_SIZES.reduce((a,b)=>Math.abs(b-d)<Math.abs(a-d)?b:a);
+
+// ─── scene ──────────────────────────────────────────────────────────────────
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 1, 1000);
+camera.position.set(78, 54, 104);
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(devicePixelRatio); renderer.setSize(innerWidth, innerHeight);
+renderer.localClippingEnabled = true;
+document.body.appendChild(renderer.domElement);
+const controls = new OrbitControls(camera, renderer.domElement);
+scene.add(new THREE.GridHelper(160, 32, 0x1c2430, 0x141a22));
+
+const dyn = new THREE.Group(); scene.add(dyn);
+const clip = new THREE.Plane(new THREE.Vector3(0,0,-1), 0);  // cuts z > d (d set live)
+let sectionOn = false;
+const mats = [];   // registry so section toggle reaches every material
+const mkLineMat = c => { const m=new THREE.LineBasicMaterial({color:c}); mats.push(m); return m; };
+const V = (x,y,z)=>new THREE.Vector3(x,y,z);
+const C = { CLOTH:0xdfe9f5, HOOP:0x4caf6a, STR:0xe0a84e, STAND:0xc25b5b, BIKE:0x8a939e, MOUNT:0xff5a5a, RIDER:0x5b8dd6 };
+
+function line(pts, color){ const g=new THREE.BufferGeometry().setFromPoints(pts); dyn.add(new THREE.Line(g, mkLineMat(color))); }
+const bar = (a,b,c)=>line([a,b],c);
+
+function build(){
+  while (dyn.children.length) dyn.remove(dyn.children[0]);
+  mats.length = 0;
+  const g = GRUBS[key], b = g.bike, L = g.len;
+  const grubCY = show.bike ? b.saddleY - g.rMid : g.rMid + 6;   // belly clearance when on a bike
+  const ex = P.explode;
+  // layer radius helpers (explode pushes cloth out, stringers in)
+  const rCloth = t => radiusAt(t,g) + ex;
+  const rStr   = t => radiusAt(t,g) - P.gap - ex;
+  const pt = (ang, r, z) => V(r*Math.cos(ang), r*Math.sin(ang) + grubCY, z);
+
+  const stations = [];
+  for (let h=0; h<P.hoops; h++) stations.push(P.hoops===1 ? 0.5 : h/(P.hoops-1));
+
+  // ── cloth skin (lofted 270° tube over the hoop radii) ──
+  if (show.cloth){
+    const NS=36, NA=30, a0=angleOf(0), a1=angleOf(STRINGERS-1);
+    const pos=[], idx=[];
+    for (let i=0;i<=NS;i++){ const t=i/NS, z=t*L, r=rCloth(t);
+      for (let j=0;j<=NA;j++){ const a=a0+(a1-a0)*j/NA; const p=pt(a,r,z); pos.push(p.x,p.y,p.z); } }
+    const w=NA+1;
+    for (let i=0;i<NS;i++) for (let j=0;j<NA;j++){ const o=i*w+j; idx.push(o,o+1,o+w, o+1,o+w+1,o+w); }
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); geo.setIndex(idx); geo.computeVertexNormals();
+    const m=new THREE.MeshBasicMaterial({ color:C.CLOTH, transparent:true, opacity:ex>0.1?0.22:0.13, side:THREE.DoubleSide, depthWrite:false });
+    mats.push(m); dyn.add(new THREE.Mesh(geo,m));
+  }
+
+  // ── hoop ribs (270° arcs, cut for belly clearance) ──
+  if (show.hoops){
+    for (const t of stations){ const r=radiusAt(t,g), z=t*L, pts=[];
+      for (let a=0;a<=60;a++){ const ang=angleOf(0)+(a/60)*(angleOf(STRINGERS-1)-angleOf(0)); pts.push(pt(ang,r,z)); }
+      line(pts, C.HOOP); }
+  }
+
+  // ── PVC stringers + LEDs ──
+  if (show.stringers){
+    const ledPts=[];
+    for (let s=0;s<STRINGERS;s++){ const ang=angleOf(s), ln=[];
+      for (let i=0;i<PX;i++){ const t=i/(PX-1), p=pt(ang,rStr(t),t*L); ln.push(p); if(i%3===0) ledPts.push(p); }
+      line(ln, C.STR); }
+    const pm=new THREE.PointsMaterial({ color:0xfff2c8, size:1.6 }); mats.push(pm);
+    dyn.add(new THREE.Points(new THREE.BufferGeometry().setFromPoints(ledPts), pm));
+  }
+
+  // ── standoffs (hoop → stringer, at every rib × stringer) ──
+  if (show.standoffs){
+    for (const t of stations) for (let s=0;s<STRINGERS;s++){ const ang=angleOf(s);
+      bar(pt(ang, radiusAt(t,g), t*L), pt(ang, rStr(t), t*L), C.STAND); }
+  }
+
+  // ── head cantilever + eyes ──
+  if (show.head){
+    const hz=-8, hr=g.rEnd;
+    const hs=new THREE.Mesh(new THREE.SphereGeometry(hr,14,10), (()=>{const m=new THREE.MeshBasicMaterial({color:C.HOOP,wireframe:true});mats.push(m);return m;})());
+    hs.position.copy(pt(Math.PI/2,0,hz)); hs.position.y = grubCY + 2; hs.position.x=0; dyn.add(hs);
+    bar(pt(angleOf(STRINGERS/2|0),radiusAt(0,g),0), V(0,grubCY+2,hz), C.STR);   // cantilever arm
+    const eyes=[]; for (const cx of [-2.5,2.5]) for(let y=0;y<4;y++) for(let x=0;x<4;x++)
+      eyes.push(V(cx+(x/3-0.5)*3, grubCY+2+(y/3-0.5)*3, hz-0.2));
+    const em=new THREE.PointsMaterial({color:0x7fe0ff,size:1.4}); mats.push(em);
+    dyn.add(new THREE.Points(new THREE.BufferGeometry().setFromPoints(eyes), em));
+    // tail extension (rack tube + plate)
+    bar(V(0,grubCY-2,L), V(0,grubCY-2,L+ (key==='parent'?18:13)), C.STR);
+  }
+
+  // ── bike + highlighted mount points ──
+  if (show.bike){
+    const frontZ=b.rearAxleZ-b.wheelbase;
+    const wheel=z=>{const c=[];for(let a=0;a<=40;a++){const th=a/40*Math.PI*2;c.push(V(0,b.wheelR+b.wheelR*Math.sin(th),z+b.wheelR*Math.cos(th)));}line(c,C.BIKE);};
+    wheel(frontZ); wheel(b.rearAxleZ);
+    const F=V(0,b.wheelR,frontZ), Rr=V(0,b.wheelR,b.rearAxleZ), BBz=frontZ+0.6*b.wheelbase;
+    const BB=V(0,b.bbY,BBz), HT=V(0,b.headY,frontZ+2), SA=V(0,b.saddleY,BBz-3);
+    bar(F,HT,C.BIKE); bar(HT,BB,C.BIKE); bar(BB,SA,C.BIKE); bar(BB,Rr,C.BIKE); bar(SA,Rr,C.BIKE);
+    if (b.lowStep){ const mid=V(0,b.bbY+5,(HT.z+SA.z)/2); bar(HT,mid,C.BIKE); bar(mid,SA,C.BIKE); } else bar(HT,SA,C.BIKE);
+    bar(V(-7,b.barsY,HT.z),V(7,b.barsY,HT.z),C.BIKE);
+    // mount points: head tube U-bolt, top tube saddle, seat tube, rear rack
+    const mm=new THREE.PointsMaterial({color:C.MOUNT,size:3.2}); mats.push(mm);
+    const mounts=[HT, V(0,(HT.y+SA.y)/2+2,(HT.z+SA.z)/2), SA, V(0,b.wheelR+4,b.rearAxleZ+2)];
+    dyn.add(new THREE.Points(new THREE.BufferGeometry().setFromPoints(mounts), mm));
+  }
+
+  // section clip
+  for (const m of mats) m.clippingPlanes = sectionOn ? [clip] : null;
+  clip.constant = L*0.5;
+
+  controls.target.set(0, grubCY, L/2);
+
+  // readout
+  const dia = stations.map(t=>nearestHoop(2*radiusAt(t,g)));
+  const strLen = (L).toFixed(0);
+  document.getElementById('readout').textContent =
+    `grub: ${g.len}" long · max Ø ${2*g.rMid}"\n` +
+    `hoops ×${P.hoops}: Ø ${dia.join(' / ')}" (nearest stock)\n` +
+    `stringers: 8 × ~${strLen}" PVC rail\n` +
+    `standoffs: ${8*P.hoops} × ${P.gap}" (sets LED→cloth gap)`;
+  document.querySelectorAll('#picker button').forEach(x=>x.classList.toggle('on',x.dataset.k===key));
+}
+
+// ─── UI ───────────────────────────────────────────────────────────────────
+const picker=document.getElementById('picker');
+for (const k of Object.keys(GRUBS)){ const btn=document.createElement('button'); btn.textContent=GRUBS[k].label; btn.dataset.k=k; btn.onclick=()=>{key=k;build();}; picker.appendChild(btn); }
+addEventListener('keydown',e=>{ if(e.key==='1'){key='parent';build();} if(e.key==='2'){key='baby';build();} });
+
+const layerBox=document.getElementById('layers');
+const mkToggle=(label,obj,k,extra)=>{ const b=document.createElement('button'); b.textContent=label;
+  const paint=()=>b.classList.toggle('on', extra?extra():obj[k]);
+  b.onclick=()=>{ if(extra){extra(true);} else obj[k]=!obj[k]; paint(); build(); }; paint(); layerBox.appendChild(b); };
+for (const [lab,k] of [['cloth','cloth'],['hoops','hoops'],['stringers','stringers'],['standoffs','standoffs'],['bike','bike'],['head/eyes','head']])
+  mkToggle(lab, show, k);
+mkToggle('section', null, null, set=>{ if(set!==undefined) sectionOn=!sectionOn; return sectionOn; });
+
+const SLIDERS=[['gap',     'gap',   1,  6, 0.25],
+               ['hoops',   'hoops', 2, 10, 1],
+               ['explode', 'explode',0, 14, 0.5]];
+const slBox=document.getElementById('sliders');
+for (const [label,k,min,max,step] of SLIDERS){
+  const l=document.createElement('label');
+  const s1=document.createElement('span'); s1.textContent=label;
+  const inp=document.createElement('input'); inp.type='range'; inp.min=min; inp.max=max; inp.step=step; inp.value=P[k];
+  const s2=document.createElement('span'); s2.textContent=P[k];
+  inp.oninput=()=>{ P[k]=parseFloat(inp.value); s2.textContent=P[k]; build(); };
+  l.append(s1,inp,s2); slBox.appendChild(l);
+}
+
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+build();
+(function loop(){ requestAnimationFrame(loop); controls.update(); renderer.render(scene,camera); })();
+</script>
+</body>
+</html>
