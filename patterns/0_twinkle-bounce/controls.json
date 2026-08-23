@@ -1,0 +1,19 @@
+{
+  "sliderBounceDepth": 0.416666667,
+  "sliderBounceRate": 0.222222222,
+  "sliderBrightness": 0.7,
+  "sliderCanopy": 0.666666667,
+  "sliderCanopyCycles": 0.275,
+  "sliderCanopyHue": 0,
+  "sliderCanopySat": 1,
+  "sliderHueDrift": 0.25,
+  "sliderSeat": 0.3,
+  "sliderSeatHue": 0.88,
+  "sliderSeatLevel": 0.3,
+  "sliderSeatSat": 0.9,
+  "sliderSpine": 0.3,
+  "sliderSpineHue": 0.55,
+  "sliderSpineSat": 0.9,
+  "sliderSweepWidth": 0.5,
+  "toggleFlipSweep": 1
+}

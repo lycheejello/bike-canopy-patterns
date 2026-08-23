@@ -13,3 +13,8 @@ backup/
 # python venvs (push-patterns.py tooling) — use Apple python / a --symlinks venv
 .venv*/
 __pycache__/
+
+# git worktrees live here (the audio-reactive branch checks out into it).
+# ⚠️ A worktree checkout must never be committed — git stages it as a gitlink
+# and the result is a repo that points at a working directory on one machine.
+.claude/worktrees/

@@ -1,96 +1,159 @@
-# grub-bike-patterns
+# bike-canopy-patterns
 
-Pixelblaze pattern code for the **8-Bit Bunny grub mutant bikes** (Burning Man 2026).
-Two cloth-skinned grub bikes, each a Pixelblaze v3 XL + Output Expander driving
-8 body stringers (360 px) + 2 eye clusters (32 px).
+Pixelblaze pattern code for the **8-Bit Bunny shade-canopy bikes** (Burning Man 2026).
+Two cruisers, each with a shade canopy and one Pixelblaze v3 XL driving a single
+WS2815 run divided into three zones along its length: **seat**, **spine** (the
+vertical mast), **canopy**.
 
-Planning, gear, wiring, and build schedule live in the Obsidian vault, **not here**:
-`~/Develop/burningman/Projects/LED Bikes - Pixelblaze.md`. This repo is *only* the
-pattern source so it gets normal per-line git history.
+Planning, gear, wiring, and build schedule live in the Obsidian vault, not here:
+`~/Develop/burningman/Projects/LED Bikes - Pixelblaze.md`. This repo is only the
+pattern source, so it gets normal per-line git history.
+
+> **The grub is dead.** The sculpted larval body, hoop/PVC armature, spandex skin
+> and programmable eyes were cut in full. The old peristalsis / heartbeat / eyes
+> patterns, the 3D pixel map, and the armature viewers are in git history if any
+> of it is ever wanted back.
 
 ## Layout
 
 ```
-maps/
-  grub-3d.js      # Pixelblaze mapper function — paste into the device Mapper tab
-  grub-3d.json    # generated coords for the offline emulator (node tools/gen-map.mjs)
 patterns/
-  peristalsis/    # signature head->tail wave (starter pattern present)
-  breathing/      # whole-body slow brighten/dim
-  heartbeat/      # double-pulse from mid-body
-  bioluminescence/# cool random twinkle
-  eyes/           # blink / glance / glare (16px clusters)
+  split-test/ diagnostic: flat colour per zone, with a build pin for the 150/300 A/B
+  breathe/    signature idle: slow whole-bike swell, spine trailing the canopy
+  beacon/     riding: steady ground pool + a comet down the spine
+  drift/      parked: slow hue travel, no event
+docs/
+  layout.md   the strip layout, the split idiom, zone intent, power
 tools/
-  gen-map.mjs     # regenerate maps/grub-3d.json from the geometry constants
-viz/
-  index.html         # landing page — links to every viewer below
-  grub-bike.html     # 3D fit check: grub over each candidate bike, belly clearance
-  construction.html  # 3D assembly: hoop ribs + stringers + standoffs + cloth + mounts
-  rib-detail.html    # 2D cross-section of one hoop station (the standoff/gap detail)
-  build-sheet.html   # 2D side profile + computed cut list (PVC, hoops, cloth yardage)
-  diffusion.html     # LED-through-cloth optics: do dots/stringer stripes blend?
+  check-patterns.mjs   run every pattern headless, assert it renders sanely
+  push-patterns.py     compile + push all patterns to a Pixelblaze over wifi
 ```
 
-`.epe` files are not committed by hand — they come from backing up a real
-Pixelblaze. When hardware lands, pull them with the sync tooling below; the
-canonical artifact is the `.epe` (JSON: source + name + id + preview), and the
-`.js` is extracted from it so git diffs cleanly.
+No `maps/`. Single strip on the native output, no Output Expander, no pixel map,
+no per-bike geometry.
 
-## Develop with no hardware (now)
-
-Patterns are a subset of JavaScript: `beforeRender(delta)` + `render3D(index, x, y, z)`,
-using built-ins like `hsv()`, `time()`, `wave()`, `triangle()`, `clamp()`.
-
-1. Generate the pixel map: `node tools/gen-map.mjs`
-2. Open the browser emulator **pb_emu** (pixelblaze-pattern-emulator):
-   https://forum.electromage.com/t/pattern-emulator-for-dev-without-hardware/4673
-3. Load `maps/grub-3d.json` as the map and a pattern from `patterns/` to render
-   it live in 3D. This is enough to dial in the peristalsis wave before any LED
-   exists.
-
-The grub body is a genuine 3D shape (8 stringers around a tapering bulge), so
-use the 3D map — head->tail math depends on it.
-
-## Viewers (browser, no hardware)
-
-Standalone HTML in `viz/` — no build step. All five share the geometry constants
-from `tools/gen-map.mjs`, so they stay in sync with the pixel map. Serve the repo
-root and open the index:
+## The layout
 
 ```
-python3 -m http.server      # from the repo root
-# → http://localhost:8000/viz/index.html
+0 ──[ seat ]──[ spine ]──[ canopy ]── pixelCount-1
+    ^             ^           ^
+    data-in    VERTICAL    horizontal,
+    at seat    mast        overhead
 ```
 
-(`diffusion.html` uses only 2D canvas and also opens straight from `file://`; the
-3D viewers load three.js from a CDN, so they need the http server / a network.)
+**Index 0 is at the seat.** The strip climbs the vertical mast, turns at the top,
+and runs out along the canopy, which is the long zone.
 
-- **grub-bike.html** — orbit the grub hull + head + LEDs over each candidate bike;
-  surfaces belly-to-ground clearance per frame. Eye/head sliders feed the map.
-- **construction.html** — the build: hoop ribs, PVC stringers, the standoffs that
-  set the LED→cloth gap, translucent cloth skin, bike + highlighted mount points.
-  Layer toggles, explode (separates the 3 shells), section cut, gap/hoop sliders.
-- **rib-detail.html** — one hoop station in cross-section; the standoff/gap junction.
-- **build-sheet.html** — side-profile shop drawing + a live cut list (PVC lengths,
-  nearest-stock hoop diameters, standoff count, cloth yardage).
-- **diffusion.html** — simulates LED light through the spandex; reports along-strip
-  and between-stringer ripple so you can find the gap where dots/stripes blend.
+| | seat | spine | canopy |
+|---|---|---|---|
+| fraction | 0.10 | 0.23 | 0.65 |
+| 150 px | 15 | 35 | 100 |
+| 300 px | 30 | 70 | 200 |
 
-## Sync with hardware (later)
+Measured off the built bike and confirmed unchanged at 300 px — same path,
+double density. The proportions are geometry, not a pixel count. Full zone table
+in [`docs/layout.md`](docs/layout.md).
 
-- **pb-sync** — pull/push patterns, extract `.js` from `.epe` for version control:
-  https://github.com/brandon-fryslie/pb-sync
-- **pixelblaze-client** (Python, WebSocket) — automate push/pull over LAN:
-  https://github.com/zranger1/pixelblaze-client
-- Example patterns to learn the dialect:
-  https://github.com/jvyduna/pb-examples
-- Docs: https://electromage.com/docs
+- **150 px vs 300 px** is chosen by the device's own *Settings → LED count*.
+  `pixelCount` is a Pixelblaze built-in, so the same source runs either build.
+- **Zone sizes** are normalised fractions on UI sliders, so a build change is a
+  drag, not an edit.
 
-## Pixel index layout (must match the Output Expander config)
+## Start with the split test
 
-| Indices | Zone | Output |
+On a new build or a re-route, push `split-test` first. Flat colour, one per
+zone, no animation:
+
+```
+split-test on a 150 px strip               (1 char = 5 px)
+  MMMMMCCCCCCCCCCCCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  ^    ^           ^
+  seat spine       canopy
+  index 0                              far end
+```
+
+| Colour | Zone |
+|---|---|
+| **Magenta** | seat (index 0 end) |
+| **Cyan** | spine |
+| **Amber** | canopy (far end) |
+| **Red** | ⚠️ the strip is *shorter* than the build under test |
+
+The zones identify the ends by themselves, so there are no separate head/tail
+markers.
+
+**The Build slider** does the 150-vs-300 A/B. Zone sizes are fractions, so the
+picture at a given build looks the same on either strip — only the pixel counts
+scale. What the pin buys you is seeing *one* build on the *other* strip:
+
+| Build slider | on a 150 px strip | on a 300 px strip |
 |---|---|---|
-| 0–359 | 8 body stringers (45 px each, stringer 0 = 0–44) | Expander ch 1–8 |
-| 360–391 | 2 eye clusters (16 px each) | Pixelblaze native, ch 0 |
+| left — follow device | full test | full test |
+| middle — pin 150 | full test | first 150 lit, **rest dark** — what a 150 build looks like |
+| right — pin 300 | ⚠️ red cap: truncated, canopy runs off the end | full test |
 
-Patterns assume this order. Configure each expander channel's start index to match.
+Drag the zone sliders until the boundaries land where you want them on the real
+bike. ⚠️ It reports the hardware **as wired**, so what you see is what the strip
+actually is.
+
+## Check patterns without hardware
+
+```
+node tools/check-patterns.mjs
+```
+
+Stubs the Pixelblaze builtins and renders every pattern for ~4s at both 150 and
+300 px, across three zone mixes and both sweep directions, asserting no NaN
+pixels, nothing out of 0..1, that the strip lights at all, that a pinned
+diagnostic goes dark past its own length, and that the diagnostics show four
+distinct zone colours at every build pin. It catches the divide-by-zero you get when a slider
+squeezes a zone down to one pixel. It is not a visual preview — for that, paste
+into the Pixelblaze web editor, or use pb_emu:
+https://forum.electromage.com/t/pattern-emulator-for-dev-without-hardware/4673
+
+## Push to a Pixelblaze
+
+```
+# once — must be Apple's python, see the warning below
+/usr/bin/python3 -m venv --symlinks .venv && .venv/bin/pip install pixelblaze-client
+
+.venv/bin/python tools/push-patterns.py --ip 192.168.4.1   # AP mode: laptop on the PB's wifi
+.venv/bin/python tools/push-patterns.py                     # auto-discover on the LAN
+.venv/bin/python tools/push-patterns.py --activate beacon
+```
+
+Pushes every `patterns/*/*.js`, compiling each through the device's own compiler,
+then sets the active pattern (default `breathe`) and saves to flash.
+
+⚠️ **Build the venv from Apple's `/usr/bin/python3`, not Homebrew.** macOS Local
+Network privacy blocks Homebrew Python from reaching the LAN, and the failure
+looks like the Pixelblaze being offline. `/usr/bin/python3`, `nc`, `curl`, and
+browsers are exempt. A `NotOpenSSLWarning` from urllib3 on this Python is
+harmless — the Pixelblaze connection is plain `ws://` on the local net.
+
+⚠️ **A venv is not relocatable.** If this directory is ever renamed or moved,
+delete `.venv` and rebuild it, or every command above fails with `bad interpreter`.
+
+## Device settings that are not pattern code
+
+- **Color order `GRB`** for the WS2815 strip. This is the Pixelblaze default — leave it alone.
+- **WS2815 is 12V.** Strip → 12V, Pixelblaze → 5V via the Mini Buck, grounds common.
+  Never power the strip from USB 5V.
+- **LED count** → 150 or 300. This is the knob that picks the build.
+
+## House rules for new patterns
+
+- **Slow breathe, not rave.** From the vault, and it is the whole aesthetic.
+- **Aim the canopy down.** Light under the canopy hits the rider and the ground.
+- **Palette is open.** The violet + cold-white house palette died with the
+  cult-temple program; there is nothing left to match. `sliderHue` and
+  `sliderSaturation` cover the full range on every art pattern.
+- ⚠️ **Brown is a warm hue at low value; beige is a warm hue at middling
+  saturation.** If it looks muddy or nude, that is the cause — see
+  [`docs/layout.md`](docs/layout.md).
+- **Keep a floor on any breathing zone.** A cycle that parks at black reads as
+  restarting rather than as breathing.
+- **Watch the duty cycle.** At 300 px the strip does not finish one night on a
+  16Ah brick, so patterns do not sit at full white. End renders with `v * v`.
+- **Copy the layout block verbatim** from `docs/layout.md` — Pixelblaze patterns
+  are single files with no imports, so the zone logic is duplicated by design.
