@@ -6,5 +6,6 @@
   "sliderSeat": 0.3,
   "sliderSpine": 0.3,
   "sliderTravel": 0.275862069,
-  "sliderWidth": 0.45
+  "sliderWidth": 0.45,
+  "toggleLockToBeat": 0
 }

@@ -116,10 +116,42 @@ export function sliderBPM(v) { v = clamp(v, 0, 1); bpm = 40 + v * 140 }
 export var intensity = 0.7
 export function sliderIntensity(v) { v = clamp(v, 0, 1); intensity = v }
 
+// Lock the pulse to the beat: half the beat climbing the mast, half blooming
+// overhead, so each pulse finishes exactly as the next one lands — no overlap
+// and no dead gap. ⚠️ While this is on, sliderTravel AND sliderBloom do
+// nothing: locking defines both halves, so there is nothing left for them to
+// set. Off by default, so the shipped look does not change under anyone.
+export var lockToBeat = 0
+export function toggleLockToBeat(v) {
+  lockToBeat = v
+  // Hand the sliders back what they last asked for, rather than stranding the
+  // pattern on whatever the lock happened to compute the instant it went off.
+  if (!v) {
+    travelMs = freeTravelMs
+    bloomMs = freeBloomMs
+  }
+}
+
+// What the sliders last set, remembered so unlocking can restore it.
+var freeTravelMs = 280
+var freeBloomMs = 420
+
 var eLevel = 0
 var beatPhase = 0
 
 function drive(delta) {
+  if (lockToBeat) {
+    // ⚠️ 1000 / (bpm / 60), NOT 60000 / bpm — same fixed-point trap as below.
+    // Largest intermediate here is 1500, well inside range.
+    var half = 1000 / (bpm / 60) / 2
+    travelMs = half
+    bloomMs = half
+  } else {
+    // Track the sliders while unlocked so the toggle has something to restore.
+    freeTravelMs = travelMs
+    freeBloomMs = bloomMs
+  }
+
   // ⚠️ NOT `delta / (60000 / bpm)`, which is the obvious way to write this and
   // is silently broken. Pixelblaze arithmetic is 16.16 FIXED POINT and wraps
   // near ±32767, so the literal 60000 comes out as -5536, the division goes

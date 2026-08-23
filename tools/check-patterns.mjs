@@ -179,7 +179,7 @@ Object.assign(globalThis, {
 });
 
 // ---- run one pattern at one configuration ----------------------------
-function exercise(mod, pixelCount, mix, flip, build, audio, label, problems) {
+function exercise(mod, pixelCount, mix, flip, build, audio, lock, label, problems) {
   globalThis.pixelCount = pixelCount;
   rngState = 12345;                    // same sequence for every configuration
   // Drive the zone fractions the way the UI sliders do.
@@ -190,6 +190,10 @@ function exercise(mod, pixelCount, mix, flip, build, audio, label, problems) {
   }
   mod.sliderBuild?.(build);
   if (typeof mod.toggleFlipSweep === "function") mod.toggleFlipSweep(flip);
+  // Beat-locking rewrites the travel and bloom timings every frame, so it is a
+  // different code path through the same pattern and has to be rendered both
+  // ways rather than only at its default.
+  if (typeof mod.toggleLockToBeat === "function") mod.toggleLockToBeat(lock);
 
   // Diagnostics pin themselves to a build length via targetCount and size their
   // zones to that, not to the device. Everything else follows pixelCount.
@@ -312,6 +316,7 @@ for (const dir of readdirSync(patternsDir).sort()) {
   const builds = typeof mod.sliderBuild === "function" ? [0, 0.5, 1] : [0];
   const buildName = { 0: "auto", 0.5: "pin150", 1: "pin300" };
   const flips = typeof mod.toggleFlipSweep === "function" ? FLIPS : [0];
+  const locks = typeof mod.toggleLockToBeat === "function" ? [0, 1] : [0];
 
   // Only the streamed patterns have an audio dimension to sweep.
   const isAudio = streamed.length > 0;
@@ -323,22 +328,24 @@ for (const dir of readdirSync(patternsDir).sort()) {
     for (const mix of MIXES)
       for (const flip of flips)
         for (const build of builds)
-          for (const audio of scenarios) {
+          for (const audio of scenarios)
+          for (const lock of locks) {
             const tag = isAudio ? ` audio=${audio}` : "";
-            const label = `${dir} @${px}px mix=${mix.label} flip=${flip} build=${buildName[build]}${tag}`;
+            const lockTag = locks.length > 1 ? ` lock=${lock}` : "";
+            const label = `${dir} @${px}px mix=${mix.label} flip=${flip} build=${buildName[build]}${tag}${lockTag}`;
             // ⚠️ Catch here. A pattern that throws at runtime — a typo'd
             // variable, a bad index — otherwise takes the whole run down with a
             // stack trace and no indication of WHICH pattern did it. Report it
             // as a problem against this pattern and carry on to the next.
             let r;
             try {
-              r = exercise(mod, px, mix, flip, build, audio, label, problems);
+              r = exercise(mod, px, mix, flip, build, audio, lock, label, problems);
             } catch (e) {
               problems.push(`${label}: threw during render — ${e.message}`);
               break;
             }
             if (!r) continue;
-            if (flip === 0 && mix.label === "defaults") {
+            if (flip === 0 && lock === 0 && mix.label === "defaults") {
               if (px === PIXEL_COUNTS[0] && build === builds[0]) byScenario[audio] = r;
               peaks.push(isAudio
                 ? `${px}px ${tag.trim().padEnd(17)} peak ${r.peak.toFixed(2)}  mean ${r.mean.toFixed(3)}  idle ${(r.idleFrac * 100).toFixed(0)}%  moving ${(r.movedFrac * 100).toFixed(0)}%  idle-anim ${(r.idleMovedFrac * 100).toFixed(0)}%`
@@ -405,4 +412,4 @@ if (problems.length) {
   for (const p of problems) console.error(`  ✗ ${p}`);
   process.exit(1);
 }
-console.log(`\n${checked} pattern(s) OK across ${PIXEL_COUNTS.join("/")} px, ${MIXES.length} zone mixes, all build pins, ${AUDIO.length} stream scenarios, and both flips where a flip toggle exists.`);
+console.log(`\n${checked} pattern(s) OK across ${PIXEL_COUNTS.join("/")} px, ${MIXES.length} zone mixes, all build pins, ${AUDIO.length} stream scenarios, both flips where a flip toggle exists, and both beat-lock states where that toggle exists.`);
