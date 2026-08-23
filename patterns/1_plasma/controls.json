@@ -1,8 +1,6 @@
 {
-  "sliderBeatRate": 0.64,
   "sliderCanopy": 0.666666667,
-  "sliderColourSpread": 0.5,
-  "sliderEnergy": 0.55,
+  "sliderColourSpread": 1,
   "sliderSeat": 0.3,
   "sliderSpine": 0.3
 }

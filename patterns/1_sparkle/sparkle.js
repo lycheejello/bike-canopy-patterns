@@ -1,8 +1,9 @@
 // sparkle — ported from pixelblaze-audio/patterns/sparkle.js.
 //
-// A dim base glow under sharp twinkles. In the original the twinkles ignited on
-// treble transients; here they ignite off the synthesised beat, so they still
-// arrive in bursts rather than at a flat rate.
+// A dim base glow under sharp twinkles. The original ignited twinkles on treble
+// transients; with the Sensor Expansion Board that mechanism is back, and the
+// detected kick is mixed in alongside it so bursts land on the beat as well as
+// on the hats.
 //
 // ⚠️ Pixelblaze arrays are fixed size and cannot grow at runtime, so the
 // per-pixel buffer is allocated once here from pixelCount, never in
@@ -71,41 +72,93 @@ function zoneAt(index) {
   else { zone = CANOPY; zpos = (i - b2) / max(runLength - b2 - 1, 1) }
 }
 
-// ---- auto drive ------------------------------------------------------
-// The original reads bass / mid / treble / level pushed over the websocket by a
-// browser doing an FFT. There is no audio on the bike, so the same four signals
-// are synthesised here from low-frequency oscillators.
+// ---- audio -----------------------------------------------------------
+// STREAMED IN, not sensed. There is no mic and no Sensor Expansion Board: a
+// browser running the app in pixelblaze-audio does the FFT and pushes these
+// over the Pixelblaze WebSocket API with `setVars` at ~40 Hz. Declaring them as
+// exported vars is the entire hookup — the names here must match the names the
+// app sends.
 //
-// The periods are deliberately NOT multiples of each other. Three LFOs at 17 /
-// 23 / 31 seconds only line up again after their least common multiple, so the
-// combined motion takes about three hours to repeat and never reads as a loop.
-// Round numbers would visibly re-sync every few seconds.
-export var energy = 0.55        // master intensity, stands in for how "loud" it is
-export function sliderEnergy(v) { v = clamp(v, 0, 1); energy = v }
+// They arrive ALREADY NORMALISED 0..1, and `beat` is already a detected onset
+// pulse. So there is deliberately no gain, no AGC and no beat detection in this
+// file: the app owns all three and its own sliders are where they get tuned.
+// Re-deriving any of it here would just fight the thing upstream of it.
+//
+// ⚠️ setVars only reaches the ACTIVE pattern. A pattern sitting in the device's
+// list that is not the running one receives nothing at all — it is not broken,
+// it is just not the one being streamed to.
+export var bass = 0
+export var mid = 0
+export var treble = 0
+export var level = 0
+export var beat = 0             // snaps to 1 on a bass onset, then decays
 
-var aLevel = 0, aBass = 0, aTreble = 0, aBeat = 0
-var beatPhase = 0
+// Smoothed with an INSTANT RISE and an exponential fall, which is the idiom the
+// upstream patterns use. A transient has to land on the frame it arrives and
+// then ease out; averaging it on the way up turns every hit to mush.
+//
+// ⚠️ The fall times are per band and deliberately unequal. Cymbals have to be
+// snappy or hi-hats smear into a wash, while overall level wants to be slow or
+// the whole strip flickers. These are the upstream values for this pattern.
+var FALL_BASS = 150, FALL_MID = 250, FALL_TREBLE = 80,  FALL_LEVEL = 200, FALL_BEAT = 140
 
-export var beatPeriod = 2.4     // seconds between pulses
-export function sliderBeatRate(v) { v = clamp(v, 0, 1); beatPeriod = 0.6 + (1 - v) * 5 }
+var eBass = 0, eMid = 0, eTreble = 0, eLevel = 0, eBeat = 0
+
+function envelope(target, current, delta, fall) {
+  return target > current ? target : current + (target - current) * min(1, delta / fall)
+}
+
+// ---- idle fallback ----------------------------------------------------
+// If the stream stops — app closed, phone asleep, someone made another pattern
+// active — the vars FREEZE at their last values rather than dropping to zero, so
+// checking for zero would never notice. Watch for them not CHANGING instead:
+// real audio jitters every single frame, so a bit-identical reading held for
+// seconds means nothing is arriving.
+//
+// A genuinely silent room reads as stalled too, which is the behaviour we want:
+// dead stream and dead silence should both land on something moving rather than
+// on a frozen strip.
+// ⚠️ A safety net, not a mode. To make a dead stream obvious instead, delete
+// driveIdle(), `stallMs`, `lastSum`, `idle`, and the stall block in drive().
+var stallMs = 0
+var lastSum = -1
+
+// Exported so the Pixelblaze editor shows it live: 0 means frames are arriving,
+// 1 means nothing is. That is the fastest way to tell "the stream is dead" from
+// "the stream is fine and the track is quiet" without guessing from the LEDs.
+export var idle = 0
+
+function driveIdle(delta) {
+  // Incommensurate periods, so the combination takes hours to repeat rather
+  // than visibly re-syncing every few seconds the way round numbers would.
+  eLevel  = 0.30 + 0.45 * wave(time(17 / 65.535))
+  eBass   = 0.20 + 0.55 * wave(time(23 / 65.535))
+  eMid    = 0.25 + 0.40 * wave(time(13 / 65.535))
+  eTreble = 0.15 + 0.35 * wave(time(31 / 65.535))
+  // time() is a sawtooth, so 1 - sawtooth is a decay and the wrap is a free
+  // sharp attack — the same shape the app's beat pulse has.
+  var ph = 1 - time(2.4 / 65.535)
+  eBeat = ph * ph * ph
+}
 
 function drive(delta) {
-  // slow swells at incommensurate periods
-  aLevel = 0.30 + 0.45 * wave(time(17 / 65.535))
-  aBass = 0.20 + 0.55 * wave(time(23 / 65.535))
-  aTreble = 0.15 + 0.35 * wave(time(31 / 65.535))
+  var sum = bass + mid + treble + level + beat
+  if (sum == lastSum) {
+    stallMs = stallMs + delta
+    if (stallMs > 2500) idle = 1
+  } else {
+    stallMs = 0
+    idle = 0
+  }
+  lastSum = sum
 
-  // A pulse with a sharp attack and exponential decay, standing in for a beat.
-  // time() is a sawtooth, so 1 - sawtooth gives the decay and the wrap gives the
-  // attack for free.
-  beatPhase = time(beatPeriod / 65.535)
-  aBeat = 1 - beatPhase
-  aBeat = aBeat * aBeat * aBeat
+  if (idle) { driveIdle(delta); return }
 
-  aLevel = aLevel * energy
-  aBass = aBass * energy
-  aTreble = aTreble * energy
-  aBeat = aBeat * energy
+  eBass   = envelope(bass,   eBass,   delta, FALL_BASS)
+  eMid    = envelope(mid,    eMid,    delta, FALL_MID)
+  eTreble = envelope(treble, eTreble, delta, FALL_TREBLE)
+  eLevel  = envelope(level,  eLevel,  delta, FALL_LEVEL)
+  eBeat   = envelope(beat,   eBeat,   delta, FALL_BEAT)
 }
 
 export var twinkle = 0.5        // how many pixels catch per burst
@@ -119,9 +172,10 @@ export function beforeRender(delta) {
 
   // ~150 ms to fade out, so a twinkle is a flash and not a lamp.
   var decay = 1 - min(1, delta / 150)
-  // Gate on the beat so twinkles arrive in bursts. Squared, so quiet moments
-  // stay genuinely quiet instead of drizzling.
-  var ignite = aBeat > 0.10 ? aBeat * aBeat * 0.6 * twinkle : 0
+  // Ignite on TREBLE, which is what upstream does and what the pattern is for:
+  // hi-hats and cymbals scatter the twinkles. Squared for contrast, and gated so
+  // quiet passages stay quiet instead of drizzling at a flat rate.
+  var ignite = eTreble > 0.08 ? eTreble * eTreble * 0.6 * twinkle : 0
 
   for (var i = 0; i < pixelCount; i++) {
     spark[i] = spark[i] * decay
@@ -132,8 +186,8 @@ export function beforeRender(delta) {
 export function render(index) {
   zoneAt(index)
 
-  var baseV = clamp(aBass * aBass * 0.5 + aLevel * 0.08, 0, 0.6)
-  var baseH = 0.95 - aBass * 0.12
+  var baseV = clamp(eBass * eBass * 0.5 + eLevel * 0.08, 0, 0.6)
+  var baseH = 0.95 - eBass * 0.12
 
   if (zone == SEAT) baseV = baseV * 0.4
   else if (zone == CANOPY) baseV = baseV * 1.1
