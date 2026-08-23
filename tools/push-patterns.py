@@ -6,9 +6,10 @@ network via pixelblaze-client, which fetches the device's own compiler, compiles
 each source, and saves it to flash. Use it to flash a fresh Pixelblaze (bike 2,
 spare) without pasting every pattern by hand.
 
-Patterns land on the device with a "0_" prefix — `breathe` becomes `0_breathe` —
-so this repo's patterns sort to the top of the device's pattern list, above
-whatever else is on it. Repo directories stay unprefixed.
+The repo directory name IS the device-side pattern name, prefix and all:
+patterns/0_breathe/ lands as `0_breathe`. The prefixes order the list in the
+Pixelblaze UI — `0_` is the main set, `1_` is the audio-reactive lane — so this
+repo's patterns sort to the top, above whatever else is on the device.
 
 OVERWRITE BEHAVIOUR. This replaces what is on the device rather than piling up
 duplicates:

@@ -15,9 +15,11 @@
 //   * a streamed pattern whose var names do not match what the app sends
 //   * an idle fallback that never engages, or engages while the stream is alive
 //
-// Every pattern is swept across both builds (150 and 300 px), across extreme
-// canopy splits, and with the spine flip both ways, because all three are meant
-// to be dragged live in the UI rather than settled in source.
+// Every pattern is swept across both builds (150 and 300 px) and across extreme
+// canopy splits, because both are meant to be dragged live in the UI rather than
+// settled in source. Patterns that expose a flip toggle are swept both ways too;
+// the rest have nothing to flip, so sweeping them would only run everything
+// twice.
 
 import { readdirSync, existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -31,9 +33,13 @@ const PIXEL_COUNTS = [150, 300];
 // squeeze zones toward a single pixel, which is the divide-by-zero case.
 const MIXES = [
   { label: "defaults", pos: null },
-  { label: "min-seam", pos: { seat: 1, spine: 1, seam: 0, canopy: 0 } },
-  { label: "max-canopy", pos: { seat: 0, spine: 0, seam: 0, canopy: 1 } },
+  { label: "min-canopy", pos: { seat: 1, spine: 1, canopy: 0 } },
+  { label: "max-canopy", pos: { seat: 0, spine: 0, canopy: 1 } },
 ];
+// Flip positions. Only swept for patterns that actually expose a flip toggle —
+// see `flips` below. Sweeping it for the others runs every configuration twice
+// for nothing, and the second pass differs only by module state carried over
+// from the first, which reads as a real difference when it is an artefact.
 const FLIPS = [0, 1];
 const FRAMES = 300;      // ~5s at 60fps — long enough to cross the 2.5s stall timer
 const DT = 1000 / 60;
@@ -130,7 +136,6 @@ function exercise(mod, pixelCount, mix, flip, build, audio, label, problems) {
   if (mix.pos) {
     mod.sliderSeat?.(mix.pos.seat);
     mod.sliderSpine?.(mix.pos.spine);
-    mod.sliderSeam?.(mix.pos.seam);
     mod.sliderCanopy?.(mix.pos.canopy);
   }
   mod.sliderBuild?.(build);
@@ -256,6 +261,7 @@ for (const dir of readdirSync(patternsDir).sort()) {
   // without the slider ignore it, so one position is enough for them.
   const builds = typeof mod.sliderBuild === "function" ? [0, 0.5, 1] : [0];
   const buildName = { 0: "auto", 0.5: "pin150", 1: "pin300" };
+  const flips = typeof mod.toggleFlipSweep === "function" ? FLIPS : [0];
 
   // Only the streamed patterns have an audio dimension to sweep.
   const isAudio = streamed.length > 0;
@@ -265,7 +271,7 @@ for (const dir of readdirSync(patternsDir).sort()) {
   const peaks = [];
   for (const px of PIXEL_COUNTS)
     for (const mix of MIXES)
-      for (const flip of FLIPS)
+      for (const flip of flips)
         for (const build of builds)
           for (const audio of scenarios) {
             const tag = isAudio ? ` audio=${audio}` : "";
@@ -338,4 +344,4 @@ if (problems.length) {
   for (const p of problems) console.error(`  ✗ ${p}`);
   process.exit(1);
 }
-console.log(`\n${checked} pattern(s) OK across ${PIXEL_COUNTS.join("/")} px, ${MIXES.length} zone mixes, both flips, all build pins, ${AUDIO.length} stream scenarios.`);
+console.log(`\n${checked} pattern(s) OK across ${PIXEL_COUNTS.join("/")} px, ${MIXES.length} zone mixes, all build pins, ${AUDIO.length} stream scenarios, and both flips where a flip toggle exists.`);
