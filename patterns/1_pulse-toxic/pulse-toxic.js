@@ -1,4 +1,4 @@
-// pulse-toxic — acid green through to yellow — the loudest of the set.
+// pulse-toxic — acid green up the mast, ultraviolet overhead.
 //
 // ⚠️ GENERATED FILE — DO NOT EDIT.
 // Built from patterns/1_pulse/pulse.js by tools/gen-variants.mjs. Only the
@@ -191,11 +191,19 @@ export function render(index) {
   // line of this file is identical to patterns/1_pulse/pulse.js — to change
   // anything but the colours, edit that and re-run the generator.
   // ---- BEGIN PALETTE ----
-  // Acid green sliding to yellow. Green sits where the eye is most sensitive,
-  // so this reads brighter than the others at the same value — the glow floor
-  // is held lower to compensate rather than letting it wash out.
-  var h = 0.30 - eLevel * 0.13
+  // ⚠️ Green and purple sit half the colour wheel apart, so INTERPOLATING
+  // between them sweeps through cyan and blue and arrives reading as neither.
+  // The two hues are assigned per ZONE instead, and the switch lands on the top
+  // of the mast — a real physical corner — so the hard edge reads as the
+  // structure of the bike rather than as a gradient that went wrong.
+  //
+  // Each side still drifts a little with loudness so neither is a flat swatch:
+  // green toward yellow-green, purple toward magenta.
+  var h = zone == CANOPY ? 0.78 + eLevel * 0.04 : 0.30 - eLevel * 0.04
   var sat = 1
+  // Green sits where the eye is most sensitive, so it reads brighter than the
+  // purple at the same value — the floor is held low so the mast does not wash
+  // out the canopy it is feeding.
   var glow = 0.015 + eLevel * 0.08
   // ---- END PALETTE ----
 

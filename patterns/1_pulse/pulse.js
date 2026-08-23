@@ -183,9 +183,14 @@ export function render(index) {
   // ---- palette: dusk --------------------------------------------------
   // ⚠️ EVERYTHING BETWEEN THESE MARKERS IS THE ONLY THING THE COLOUR VARIANTS
   // CHANGE. tools/gen-variants.mjs reads this file, swaps this block for
-  // another palette and writes patterns/1_pulse-<name>/. Keep the block to
-  // assignments of `h`, `sat` and `glow` from `eLevel` — anything else here
-  // would be silently dropped from every variant.
+  // another palette and writes patterns/1_pulse-<name>/. A block must ASSIGN
+  // exactly `h`, `sat` and `glow` and nothing else — anything else declared
+  // here is silently dropped from every variant.
+  //
+  // It may READ anything already set by this point: `eLevel`, and — because
+  // zoneAt() has run above — `zone`, `zpos` and `travel`. A palette that wants
+  // a different colour per zone needs that, and `v` is NOT available: it is
+  // computed below from `glow`.
   // ---- BEGIN PALETTE ----
   // Blue when quiet, warm as the music lifts — one hue for every zone, so the
   // travelling front stays visibly the same event as the bloom it becomes.
