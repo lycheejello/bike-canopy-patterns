@@ -83,10 +83,40 @@ function streamFrame(scenario, tMs) {
 // accessors instead: the assignment then happens INSIDE the module, where it
 // mutates the real binding. Loaded from a data: URL so nothing is written to
 // the repo.
+// One-character edit distance, capped — enough to spot a slip like `levl`,
+// without pulling in a real string-distance library for four short names.
+function editDistance(a, b) {
+  if (Math.abs(a.length - b.length) > 1) return 2;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++)
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+// ⚠️ setVars matches on NAME, case included, and silently drops anything that
+// does not match. A pattern spelling a var `treb` or `Level` is valid JS that
+// renders perfectly on the bench and receives nothing on the bike, with no
+// error anywhere — so a name that is CLOSE to a wire name but not equal to one
+// is treated as a typo rather than as a coincidence.
+function nearWireName(name) {
+  if (STREAMED.includes(name)) return null;
+  const n = name.toLowerCase();
+  for (const w of STREAMED) {
+    if (n === w) return w;                                  // only the case differs
+    if (w.startsWith(n) && n.length >= 3) return w;          // truncated: treb, bas
+    if (editDistance(n, w) === 1) return w;                  // one-character slip: levl
+  }
+  return null;
+}
+
 async function loadPattern(file) {
   const src = readFileSync(file, "utf8");
-  const streamed = STREAMED.filter((n) =>
-    new RegExp(`^export var ${n}\\b`, "m").test(src));
+  const exported = [...src.matchAll(/^export var (\w+)/gm)].map((m) => m[1]);
+  const streamed = STREAMED.filter((n) => exported.includes(n));
   let text = src;
   if (streamed.length) {
     const acc = streamed
@@ -96,7 +126,7 @@ async function loadPattern(file) {
   }
   const url = "data:text/javascript;base64," + Buffer.from(text).toString("base64");
   const mod = await import(url);
-  return { mod, streamed };
+  return { mod, streamed, exported };
 }
 
 let clockMs = 0;
@@ -244,9 +274,9 @@ for (const dir of readdirSync(patternsDir).sort()) {
   }
   const file = join(dirPath, js[0]);
 
-  let mod, streamed;
+  let mod, streamed, exported;
   try {
-    ({ mod, streamed } = await loadPattern(file));
+    ({ mod, streamed, exported } = await loadPattern(file));
   } catch (e) {
     // The message can embed the whole data: URL, so keep only the first line.
     problems.push(`${dir}: failed to load — ${String(e.message).split("\n")[0].slice(0, 200)}`);
@@ -298,13 +328,9 @@ for (const dir of readdirSync(patternsDir).sort()) {
 
   // ---- streaming assertions -----------------------------------------
   if (isAudio) {
-    // ⚠️ The wire contract. setVars matches on NAME, so a pattern that spells a
-    // var differently from the app receives nothing and simply never reacts —
-    // with no error anywhere. This is the single most likely way for the audio
-    // to be "broken" on the bike, and it is invisible without this check.
-    const missing = ["bass", "mid", "treble", "level"].filter((n) => !streamed.includes(n));
-    if (missing.length)
-      problems.push(`${dir}: does not export ${missing.join(", ")} — setVars from the app cannot reach it`);
+    // A pattern only needs to declare the bands it actually reads — a loudness
+    // meter wants `level` and nothing else, and declaring the rest would just
+    // put dead names in the device's variable list.
 
     const quiet = byScenario["quiet"], music = byScenario["music"];
     const loud = byScenario["loud"], dead = byScenario["no-stream"];
@@ -333,6 +359,18 @@ for (const dir of readdirSync(patternsDir).sort()) {
     if (loud && music && loud.mean > 0.98)
       problems.push(`${dir}: mean brightness ${loud.mean.toFixed(3)} at full scale — the pattern saturates instead of keeping structure`);
   }
+
+  // ---- wire-name check (every pattern, not just the streamed ones) ----
+  // Runs outside the isAudio branch on purpose: a pattern whose ONLY audio var
+  // is misspelled reads as a non-audio pattern, which is exactly the case that
+  // needs catching.
+  for (const name of exported) {
+    const near = nearWireName(name);
+    if (near)
+      problems.push(`${dir}: exports \`${name}\` — setVars sends \`${near}\`, so this never receives anything`);
+  }
+  if (dir.startsWith("1_") && !streamed.length)
+    problems.push(`${dir}: is in the 1_ audio lane but exports none of ${STREAMED.join("/")} — nothing can reach it`);
 
   checked++;
   console.log(`  ${problems.length ? "?" : "✓"} ${dir}`);
