@@ -120,11 +120,19 @@ var eLevel = 0
 var beatPhase = 0
 
 function drive(delta) {
-  // ⚠️ Accumulate PHASE rather than comparing elapsed time against a stored
-  // beat start. The BPM slider is meant to be dragged while the pattern runs,
-  // and a phase accumulator simply changes rate when it moves; recomputing from
+  // ⚠️ NOT `delta / (60000 / bpm)`, which is the obvious way to write this and
+  // is silently broken. Pixelblaze arithmetic is 16.16 FIXED POINT and wraps
+  // near ±32767, so the literal 60000 comes out as -5536, the division goes
+  // negative, beatPhase counts DOWN and never reaches 1 — the pattern sits
+  // there lit and perfectly still. Measured on hardware: 60000/120 evaluates to
+  // -46.13, not 500. Keep every intermediate small; this form is seconds times
+  // beats-per-second and never exceeds ~4.
+  //
+  // Accumulate PHASE rather than comparing elapsed time against a stored beat
+  // start: the BPM slider is meant to be dragged while the pattern runs, and a
+  // phase accumulator simply changes rate when it moves, where recomputing from
   // a start time would make the next beat jump early or stall.
-  beatPhase = beatPhase + delta / (60000 / bpm)
+  beatPhase = beatPhase + delta / 1000 * (bpm / 60)
   if (beatPhase >= 1) {
     // floor() rather than -1: a long frame can cross more than one beat, and
     // subtracting a single beat would leave phase above 1 and fire again next

@@ -14,6 +14,7 @@
 //   * a pinned diagnostic that fails to go dark past its own build length
 //   * a streamed pattern whose var names do not match what the app sends
 //   * an idle fallback that never engages, or engages while the stream is alive
+//   * a numeric literal past the device's fixed-point range
 //
 // Every pattern is swept across both builds (150 and 300 px) and across extreme
 // canopy splits, because both are meant to be dragged live in the UI rather than
@@ -113,6 +114,25 @@ function nearWireName(name) {
   return null;
 }
 
+// ⚠️ Pixelblaze arithmetic is 16.16 FIXED POINT and wraps near ±32767. Node
+// runs on doubles, so an expression that overflows on the device renders
+// perfectly in this harness and is dead on the bike — `60000 / bpm` came out as
+// -46.13 rather than 500, and the pattern sat lit and motionless.
+//
+// Whole EXPRESSIONS cannot be checked without emulating the arithmetic, but
+// literals can, and an out-of-range literal is how it usually gets in. Comments
+// are stripped first: this file, and the patterns themselves, discuss the limit
+// in prose.
+const FIXED_POINT_MAX = 32767;
+
+function oversizedLiterals(src) {
+  const code = src.replace(/\/\/[^\n]*/g, "");
+  const seen = new Set();
+  for (const m of code.matchAll(/(?<![\w.])\d+(?:\.\d+)?/g))
+    if (parseFloat(m[0]) > FIXED_POINT_MAX) seen.add(m[0]);
+  return [...seen];
+}
+
 async function loadPattern(file) {
   const src = readFileSync(file, "utf8");
   const exported = [...src.matchAll(/^export var (\w+)/gm)].map((m) => m[1]);
@@ -126,7 +146,7 @@ async function loadPattern(file) {
   }
   const url = "data:text/javascript;base64," + Buffer.from(text).toString("base64");
   const mod = await import(url);
-  return { mod, streamed, exported };
+  return { mod, streamed, exported, oversized: oversizedLiterals(src) };
 }
 
 let clockMs = 0;
@@ -274,9 +294,9 @@ for (const dir of readdirSync(patternsDir).sort()) {
   }
   const file = join(dirPath, js[0]);
 
-  let mod, streamed, exported;
+  let mod, streamed, exported, oversized;
   try {
-    ({ mod, streamed, exported } = await loadPattern(file));
+    ({ mod, streamed, exported, oversized } = await loadPattern(file));
   } catch (e) {
     // The message can embed the whole data: URL, so keep only the first line.
     problems.push(`${dir}: failed to load — ${String(e.message).split("\n")[0].slice(0, 200)}`);
@@ -359,6 +379,9 @@ for (const dir of readdirSync(patternsDir).sort()) {
     if (loud && music && loud.mean > 0.98)
       problems.push(`${dir}: mean brightness ${loud.mean.toFixed(3)} at full scale — the pattern saturates instead of keeping structure`);
   }
+
+  for (const lit of oversized)
+    problems.push(`${dir}: literal ${lit} exceeds the device's fixed-point range (±${FIXED_POINT_MAX}) — it wraps on hardware and renders fine here`);
 
   // ---- wire-name check (every pattern, not just the streamed ones) ----
   // Runs outside the isAudio branch on purpose: a pattern whose ONLY audio var
