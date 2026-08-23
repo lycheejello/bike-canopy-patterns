@@ -13,9 +13,10 @@
 // this build has a VERTICAL mast under a horizontal canopy. A beat that travels
 // reads as the bike being struck at the seat and ringing out overhead.
 //
-//   seat    a short flash where the pulse is born
-//   spine   a band climbing the mast, one per beat
+//   spine   a band climbing the mast from its foot, one per beat — the pulse
+//           starts HERE, at the bottom of the spine, not at the seat
 //   canopy  blooms when the front reaches the top, then falls away
+//   seat    a low swell underneath: present on the beat, never the event
 //
 // The travel time is a control, so the arrival can be tuned to land with the
 // music rather than always racing ahead of it.
@@ -97,6 +98,11 @@ export function sliderWidth(v) { v = clamp(v, 0, 1); bandWidth = 0.08 + v * 0.6 
 export var bloomMs = 420        // canopy fall time after the front arrives
 export function sliderBloom(v) { v = clamp(v, 0, 1); bloomMs = 120 + v * 900 }
 
+// How far the seat lifts on a beat. Not a control: it exists to stay UNDER the
+// band, and a slider that can raise it past that would only let the seat take
+// the launch back.
+var SEAT_LIFT = 0.18
+
 
 // ---- BEGIN DRIVE ----
 // ---- metronome --------------------------------------------------------
@@ -110,11 +116,16 @@ export var bpm = 120
 export function sliderBPM(v) { v = clamp(v, 0, 1); bpm = 40 + v * 140 }
 
 // Stands in for loudness, which is what every palette reads to pick its colour.
-// A slow swell rather than a constant, so the colour still breathes. The period
-// is deliberately not a multiple of any sane BPM, so the swell and the beat
-// never visibly lock together into one repeating gesture.
 export var intensity = 0.7
 export function sliderIntensity(v) { v = clamp(v, 0, 1); intensity = v }
+
+// How fast intensity breathes, in swells per second. At 0 the LFO stops and
+// intensity is held flat — so this one slider covers steady, slow drift and
+// obvious pulsing, rather than needing a separate on/off.
+// Squared, because everything interesting is at the slow end and a linear
+// mapping would bunch it all into the first tenth of the travel.
+export var lfoRate = 0.0526     // ≈ one swell every 19 s
+export function sliderLFO(v) { v = clamp(v, 0, 1); lfoRate = v * v * 0.5 }
 
 // Lock the pulse to the beat: half the beat climbing the mast, half blooming
 // overhead, so each pulse finishes exactly as the next one lands — no overlap
@@ -138,6 +149,7 @@ var freeBloomMs = 420
 
 var eLevel = 0
 var beatPhase = 0
+var lfoPhase = 0
 
 function drive(delta) {
   if (lockToBeat) {
@@ -173,18 +185,40 @@ function drive(delta) {
     travel = 0
   }
 
-  eLevel = clamp(intensity * (0.55 + 0.45 * wave(time(19 / 65.535))), 0, 1)
+  // ⚠️ A running phase, not time(), because the rate is a live control: changing
+  // the argument to time() mid-flight jumps the output, where advancing a phase
+  // just changes how fast it moves.
+  if (lfoRate <= 0) {
+    // Held flat rather than frozen wherever the wave happened to stop, which
+    // would leave the bike at an arbitrary brightness depending on when the
+    // slider was touched.
+    eLevel = clamp(intensity, 0, 1)
+  } else {
+    lfoPhase = lfoPhase + delta / 1000 * lfoRate
+    // ⚠️ Wrap it. wave() is periodic in 1, so this is exact — and without it the
+    // phase climbs forever and hits the 16.16 fixed-point ceiling after a few
+    // hours of running, which on a bike means overnight.
+    if (lfoPhase >= 1) lfoPhase = lfoPhase - floor(lfoPhase)
+    eLevel = clamp(intensity * (0.55 + 0.45 * wave(lfoPhase)), 0, 1)
+  }
 }
 // ---- END DRIVE ----
 
 export function beforeRender(delta) {
   layout()
-  drive(delta)
 
+  // ⚠️ Advance BEFORE drive(), not after. drive() resets travel to 0 when a beat
+  // lands, so advancing afterwards moves the front off the foot of the mast in
+  // the same frame — at 60fps that is ~6% up the spine, and the pulse visibly
+  // starts partway up instead of at the bottom. This order means a beat landing
+  // this frame renders at exactly 0.
   travel = travel + delta / travelMs
   // Stop it growing without bound between beats: hours of drift would eventually
-  // cost float precision, and nothing reads `travel` past the bloom anyway.
+  // reach the 16.16 fixed-point ceiling, and nothing reads `travel` past the
+  // bloom anyway.
   if (travel > 9) travel = 9
+
+  drive(delta)
 }
 
 export function render(index) {
@@ -205,9 +239,13 @@ export function render(index) {
   var v = glow
 
   if (zone == SEAT) {
-    // A short flash where the pulse is born, gone by the time the front is a
-    // third of the way up.
-    v = max(glow, clamp(1 - travel * 3, 0, 1))
+    // ⚠️ A low swell, NOT a flash. `zpos` is deliberately unused here, so the
+    // whole seat lifts together — and at full brightness that reads as a bright
+    // block igniting, which makes the SEAT look like the origin and steals the
+    // launch from the mast. The pulse is meant to read as starting at the foot
+    // of the spine, so the seat only acknowledges the beat: it tops out well
+    // under the band and is gone before the front is a third of the way up.
+    v = glow + SEAT_LIFT * clamp(1 - travel * 2.5, 0, 1)
   } else if (zone == SPINE) {
     // Triangular band centred on the front. Falls to nothing at bandWidth, so
     // the mast is dark ahead of and behind the pulse.

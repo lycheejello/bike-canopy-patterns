@@ -155,14 +155,24 @@ alive.
 
 ### The pulse family
 
-Eight patterns, one hand-written source. `patterns/1_pulse/pulse.js` is the only
-file anyone edits; `tools/gen-variants.mjs` builds the other seven along two
+Ten patterns, one hand-written source. `patterns/1_pulse/pulse.js` is the only
+file anyone edits; `tools/gen-variants.mjs` builds the other nine along two
 axes:
 
-|          | dusk       | ember             | ice             | toxic             |
-|----------|------------|-------------------|-----------------|-------------------|
-| **audio**| `1_pulse` *(source)* | `1_pulse-ember` | `1_pulse-ice` | `1_pulse-toxic` |
-| **bpm**  | `2_pulse`  | `2_pulse-ember`   | `2_pulse-ice`   | `2_pulse-toxic`   |
+|           | dusk | ember | ice | toxic | spectrum |
+|-----------|------|-------|-----|-------|----------|
+| **audio** | `1_pulse` *(source)* | `1_pulse-ember` | `1_pulse-ice` | `1_pulse-toxic` | `1_pulse-spectrum` |
+| **bpm**   | `2_pulse` | `2_pulse-ember` | `2_pulse-ice` | `2_pulse-toxic` | `2_pulse-spectrum` |
+
+Every palette but `spectrum` maps loudness to hue, so a quiet passage parks it
+in one colour family; `spectrum` walks the whole wheel on a clock instead and
+lets loudness drive brightness only.
+
+The `2_` family adds three controls the `1_` family has no use for: **BPM**,
+**LFO** (how fast intensity breathes — at 0 it holds flat), and **lock to
+beat**, which splits each beat evenly between the climb and the bloom so a
+pulse finishes exactly as the next lands. While lock is on, the travel and
+bloom sliders do nothing.
 
 The **drive** axis is where the beat comes from — streamed audio, or an internal
 metronome with a BPM slider. The **palette** axis is colour. Everything else —

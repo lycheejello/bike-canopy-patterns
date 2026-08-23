@@ -1,9 +1,9 @@
-// pulse-toxic — acid green up the mast, ultraviolet overhead.
+// pulse-spectrum — the whole colour wheel, walking on its own clock.
 //
 // ⚠️ GENERATED FILE — DO NOT EDIT.
 // Built from patterns/1_pulse/pulse.js by tools/gen-variants.mjs:
 //   drive   audio (streamed over the WebSocket API)
-//   palette toxic
+//   palette spectrum
 // Everything else is shared with the source. Edit the source and re-run;
 // edits here are overwritten and --check will fail on them.
 //
@@ -212,24 +212,20 @@ export function beforeRender(delta) {
 export function render(index) {
   zoneAt(index)
 
-  // ---- palette: toxic --------------------------------------------------
+  // ---- palette: spectrum --------------------------------------------------
   // This palette is substituted in by tools/gen-variants.mjs; every other
   // line comes from patterns/1_pulse/pulse.js. Edit that, not this.
   // ---- BEGIN PALETTE ----
-  // ⚠️ Green and purple sit half the colour wheel apart, so INTERPOLATING
-  // between them sweeps through cyan and blue and arrives reading as neither.
-  // The two hues are assigned per ZONE instead, and the switch lands on the top
-  // of the mast — a real physical corner — so the hard edge reads as the
-  // structure of the bike rather than as a gradient that went wrong.
+  // ⚠️ The one palette that ignores loudness entirely. The others map eLevel to
+  // hue, so a quiet passage parks them in one colour; this one walks the wheel
+  // on a clock instead, so a long ride never settles anywhere. Loudness still
+  // drives BRIGHTNESS through glow — it just has no say in the colour.
   //
-  // Each side still drifts a little with loudness so neither is a flat swatch:
-  // green toward yellow-green, purple toward magenta.
-  var h = zone == CANOPY ? 0.78 + eLevel * 0.04 : 0.30 - eLevel * 0.04
+  // time() is fine here where a running phase would be overkill: the period is
+  // a constant, so there is no live control to jump when it changes.
+  var h = time(28 / 65.535) + zpos * 0.08
   var sat = 1
-  // Green sits where the eye is most sensitive, so it reads brighter than the
-  // purple at the same value — the floor is held low so the mast does not wash
-  // out the canopy it is feeding.
-  var glow = 0.015 + eLevel * 0.08
+  var glow = 0.02 + eLevel * 0.10
   // ---- END PALETTE ----
 
   var v = glow

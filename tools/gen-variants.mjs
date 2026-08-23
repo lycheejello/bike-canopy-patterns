@@ -65,6 +65,20 @@ const PALETTES = [
   var glow = 0.02 + eLevel * 0.12`,
   },
   {
+    name: "spectrum",
+    blurb: "the whole colour wheel, walking on its own clock.",
+    body: `  // ⚠️ The one palette that ignores loudness entirely. The others map eLevel to
+  // hue, so a quiet passage parks them in one colour; this one walks the wheel
+  // on a clock instead, so a long ride never settles anywhere. Loudness still
+  // drives BRIGHTNESS through glow — it just has no say in the colour.
+  //
+  // time() is fine here where a running phase would be overkill: the period is
+  // a constant, so there is no live control to jump when it changes.
+  var h = time(28 / 65.535) + zpos * 0.08
+  var sat = 1
+  var glow = 0.02 + eLevel * 0.10`,
+  },
+  {
     name: "toxic",
     blurb: "acid green up the mast, ultraviolet overhead.",
     body: `  // ⚠️ Green and purple sit half the colour wheel apart, so INTERPOLATING
@@ -104,11 +118,16 @@ export var bpm = 120
 export function sliderBPM(v) { v = clamp(v, 0, 1); bpm = 40 + v * 140 }
 
 // Stands in for loudness, which is what every palette reads to pick its colour.
-// A slow swell rather than a constant, so the colour still breathes. The period
-// is deliberately not a multiple of any sane BPM, so the swell and the beat
-// never visibly lock together into one repeating gesture.
 export var intensity = 0.7
 export function sliderIntensity(v) { v = clamp(v, 0, 1); intensity = v }
+
+// How fast intensity breathes, in swells per second. At 0 the LFO stops and
+// intensity is held flat — so this one slider covers steady, slow drift and
+// obvious pulsing, rather than needing a separate on/off.
+// Squared, because everything interesting is at the slow end and a linear
+// mapping would bunch it all into the first tenth of the travel.
+export var lfoRate = 0.0526     // ≈ one swell every 19 s
+export function sliderLFO(v) { v = clamp(v, 0, 1); lfoRate = v * v * 0.5 }
 
 // Lock the pulse to the beat: half the beat climbing the mast, half blooming
 // overhead, so each pulse finishes exactly as the next one lands — no overlap
@@ -132,6 +151,7 @@ var freeBloomMs = 420
 
 var eLevel = 0
 var beatPhase = 0
+var lfoPhase = 0
 
 function drive(delta) {
   if (lockToBeat) {
@@ -167,7 +187,22 @@ function drive(delta) {
     travel = 0
   }
 
-  eLevel = clamp(intensity * (0.55 + 0.45 * wave(time(19 / 65.535))), 0, 1)
+  // ⚠️ A running phase, not time(), because the rate is a live control: changing
+  // the argument to time() mid-flight jumps the output, where advancing a phase
+  // just changes how fast it moves.
+  if (lfoRate <= 0) {
+    // Held flat rather than frozen wherever the wave happened to stop, which
+    // would leave the bike at an arbitrary brightness depending on when the
+    // slider was touched.
+    eLevel = clamp(intensity, 0, 1)
+  } else {
+    lfoPhase = lfoPhase + delta / 1000 * lfoRate
+    // ⚠️ Wrap it. wave() is periodic in 1, so this is exact — and without it the
+    // phase climbs forever and hits the 16.16 fixed-point ceiling after a few
+    // hours of running, which on a bike means overnight.
+    if (lfoPhase >= 1) lfoPhase = lfoPhase - floor(lfoPhase)
+    eLevel = clamp(intensity * (0.55 + 0.45 * wave(lfoPhase)), 0, 1)
+  }
 }`,
   },
 ];

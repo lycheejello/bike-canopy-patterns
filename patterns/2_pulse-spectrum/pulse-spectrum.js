@@ -1,9 +1,9 @@
-// pulse-toxic — acid green up the mast, ultraviolet overhead.
+// pulse-spectrum (bpm) — the whole colour wheel, walking on its own clock.
 //
 // ⚠️ GENERATED FILE — DO NOT EDIT.
 // Built from patterns/1_pulse/pulse.js by tools/gen-variants.mjs:
-//   drive   audio (streamed over the WebSocket API)
-//   palette toxic
+//   drive   bpm (an internal metronome, no audio)
+//   palette spectrum
 // Everything else is shared with the source. Edit the source and re-run;
 // edits here are overwritten and --check will fail on them.
 //
@@ -105,90 +105,102 @@ var SEAT_LIFT = 0.18
 
 
 // ---- BEGIN DRIVE ----
-// ⚠️ EVERYTHING TO THE `END DRIVE` MARKER IS SWAPPED PER FAMILY by
-// tools/gen-variants.mjs. `1_` is driven by streamed audio; `2_` runs off an
-// internal metronome with a BPM slider and no audio at all.
+// ---- metronome --------------------------------------------------------
+// NO AUDIO AT ALL. The beat comes from a clock, so this family needs nothing
+// streaming to it and nothing plugged into it. Run it when there is no phone on
+// the bike, or when the music is coming from somewhere the app cannot hear.
 //
-// A drive block owes the shared mechanism below exactly two things:
-//   * set `travel = 0` at the instant a beat lands
-//   * maintain `eLevel` (0..1), which every palette reads for its colour
-// Anything else it declares is private to that family.
-// ---- audio -----------------------------------------------------------
-// STREAMED IN, not sensed. A browser running the app in pixelblaze-audio runs
-// bass-flux onset detection and pushes these over the Pixelblaze WebSocket API
-// with `setVars` at ~40 Hz, already normalised 0..1. `beat` arrives as a pulse:
-// ~1 on a hit, decaying toward 0. Beat sensitivity is tuned in the app, not
-// here.
-//
-// ⚠️ setVars only reaches the ACTIVE pattern. Sitting in the device's list is
-// not enough — a pattern that is not the running one receives nothing.
-export var beat = 0
+// There is no `idle` var here and no stall detection: with no stream to lose,
+// there is nothing to fall back FROM.
+export var bpm = 120
+export function sliderBPM(v) { v = clamp(v, 0, 1); bpm = 40 + v * 140 }
 
-// ⚠️ `level` is declared for a reason that is not visual, and removing it would
-// break the pattern in a way that is hard to see. The stall detector below
-// needs a signal that MOVES whenever the stream is alive. `beat` does not: in
-// an ambient passage with no kick it sits at exactly 0 for many seconds while
-// the app is streaming perfectly happily, and a beat-only stall check would
-// call that a dead stream and drop to the idle animation mid-track.
-// It earns its place visually too, as the resting glow between hits.
-export var level = 0
+// Stands in for loudness, which is what every palette reads to pick its colour.
+export var intensity = 0.7
+export function sliderIntensity(v) { v = clamp(v, 0, 1); intensity = v }
+
+// How fast intensity breathes, in swells per second. At 0 the LFO stops and
+// intensity is held flat — so this one slider covers steady, slow drift and
+// obvious pulsing, rather than needing a separate on/off.
+// Squared, because everything interesting is at the slow end and a linear
+// mapping would bunch it all into the first tenth of the travel.
+export var lfoRate = 0.0526     // ≈ one swell every 19 s
+export function sliderLFO(v) { v = clamp(v, 0, 1); lfoRate = v * v * 0.5 }
+
+// Lock the pulse to the beat: half the beat climbing the mast, half blooming
+// overhead, so each pulse finishes exactly as the next one lands — no overlap
+// and no dead gap. ⚠️ While this is on, sliderTravel AND sliderBloom do
+// nothing: locking defines both halves, so there is nothing left for them to
+// set. Off by default, so the shipped look does not change under anyone.
+export var lockToBeat = 0
+export function toggleLockToBeat(v) {
+  lockToBeat = v
+  // Hand the sliders back what they last asked for, rather than stranding the
+  // pattern on whatever the lock happened to compute the instant it went off.
+  if (!v) {
+    travelMs = freeTravelMs
+    bloomMs = freeBloomMs
+  }
+}
+
+// What the sliders last set, remembered so unlocking can restore it.
+var freeTravelMs = 280
+var freeBloomMs = 420
 
 var eLevel = 0
-
-function envelope(target, current, delta, fall) {
-  return target > current ? target : current + (target - current) * min(1, delta / fall)
-}
-
-// ---- idle fallback ----------------------------------------------------
-// When the stream stops the vars FREEZE at their last values rather than
-// dropping to zero, so checking for zero would never notice. Watch for them not
-// CHANGING instead. Silence reads as stalled too, which is what we want.
-// ⚠️ A safety net, not a mode. To make a dead stream obvious instead, delete
-// driveIdle(), `stallMs`, `lastSum`, `idlePhase`, `idle` and the stall block.
-var stallMs = 0
-var lastSum = -1
-var idlePhase = 0
-
-// Exported so the Pixelblaze editor shows it live: 0 means frames are arriving,
-// 1 means nothing is. The fastest way to tell "the stream is dead" from "the
-// track has no kick right now" without guessing from the LEDs.
-export var idle = 0
-
-var lastBeat = 0               // previous frame's `beat`, for edge detection
-
-function driveIdle(delta) {
-  eLevel = 0.20 + 0.30 * wave(time(17 / 65.535))
-  // Synthesise an onset roughly every 2.4 s so the mast still fires with no
-  // stream. time() is a sawtooth, so a wrap to a SMALLER value is the tick.
-  var ph = time(2.4 / 65.535)
-  if (ph < idlePhase) travel = 0
-  idlePhase = ph
-}
+var beatPhase = 0
+var lfoPhase = 0
 
 function drive(delta) {
-  var sum = level + beat
-  if (sum == lastSum) {
-    stallMs = stallMs + delta
-    if (stallMs > 2500) idle = 1
+  if (lockToBeat) {
+    // ⚠️ 1000 / (bpm / 60), NOT 60000 / bpm — same fixed-point trap as below.
+    // Largest intermediate here is 1500, well inside range.
+    var half = 1000 / (bpm / 60) / 2
+    travelMs = half
+    bloomMs = half
   } else {
-    stallMs = 0
-    idle = 0
-  }
-  lastSum = sum
-
-  if (idle) {
-    driveIdle(delta)
-    return
+    // Track the sliders while unlocked so the toggle has something to restore.
+    freeTravelMs = travelMs
+    freeBloomMs = bloomMs
   }
 
-  eLevel = envelope(level, eLevel, delta, 250)
+  // ⚠️ NOT `delta / (60000 / bpm)`, which is the obvious way to write this and
+  // is silently broken. Pixelblaze arithmetic is 16.16 FIXED POINT and wraps
+  // near ±32767, so the literal 60000 comes out as -5536, the division goes
+  // negative, beatPhase counts DOWN and never reaches 1 — the pattern sits
+  // there lit and perfectly still. Measured on hardware: 60000/120 evaluates to
+  // -46.13, not 500. Keep every intermediate small; this form is seconds times
+  // beats-per-second and never exceeds ~4.
+  //
+  // Accumulate PHASE rather than comparing elapsed time against a stored beat
+  // start: the BPM slider is meant to be dragged while the pattern runs, and a
+  // phase accumulator simply changes rate when it moves, where recomputing from
+  // a start time would make the next beat jump early or stall.
+  beatPhase = beatPhase + delta / 1000 * (bpm / 60)
+  if (beatPhase >= 1) {
+    // floor() rather than -1: a long frame can cross more than one beat, and
+    // subtracting a single beat would leave phase above 1 and fire again next
+    // frame — stuttering instead of just dropping the beat it missed.
+    beatPhase = beatPhase - floor(beatPhase)
+    travel = 0
+  }
 
-  // ⚠️ Fire on the RISING EDGE, not on the value. `beat` is a decaying pulse,
-  // so its magnitude alone cannot tell "a new hit just landed" from "the last
-  // one is still fading" — comparing against the previous frame is the only way
-  // to see an onset. The margin ignores stream jitter on the way down.
-  if (beat > lastBeat + 0.08) travel = 0
-  lastBeat = beat
+  // ⚠️ A running phase, not time(), because the rate is a live control: changing
+  // the argument to time() mid-flight jumps the output, where advancing a phase
+  // just changes how fast it moves.
+  if (lfoRate <= 0) {
+    // Held flat rather than frozen wherever the wave happened to stop, which
+    // would leave the bike at an arbitrary brightness depending on when the
+    // slider was touched.
+    eLevel = clamp(intensity, 0, 1)
+  } else {
+    lfoPhase = lfoPhase + delta / 1000 * lfoRate
+    // ⚠️ Wrap it. wave() is periodic in 1, so this is exact — and without it the
+    // phase climbs forever and hits the 16.16 fixed-point ceiling after a few
+    // hours of running, which on a bike means overnight.
+    if (lfoPhase >= 1) lfoPhase = lfoPhase - floor(lfoPhase)
+    eLevel = clamp(intensity * (0.55 + 0.45 * wave(lfoPhase)), 0, 1)
+  }
 }
 // ---- END DRIVE ----
 
@@ -212,24 +224,20 @@ export function beforeRender(delta) {
 export function render(index) {
   zoneAt(index)
 
-  // ---- palette: toxic --------------------------------------------------
+  // ---- palette: spectrum --------------------------------------------------
   // This palette is substituted in by tools/gen-variants.mjs; every other
   // line comes from patterns/1_pulse/pulse.js. Edit that, not this.
   // ---- BEGIN PALETTE ----
-  // ⚠️ Green and purple sit half the colour wheel apart, so INTERPOLATING
-  // between them sweeps through cyan and blue and arrives reading as neither.
-  // The two hues are assigned per ZONE instead, and the switch lands on the top
-  // of the mast — a real physical corner — so the hard edge reads as the
-  // structure of the bike rather than as a gradient that went wrong.
+  // ⚠️ The one palette that ignores loudness entirely. The others map eLevel to
+  // hue, so a quiet passage parks them in one colour; this one walks the wheel
+  // on a clock instead, so a long ride never settles anywhere. Loudness still
+  // drives BRIGHTNESS through glow — it just has no say in the colour.
   //
-  // Each side still drifts a little with loudness so neither is a flat swatch:
-  // green toward yellow-green, purple toward magenta.
-  var h = zone == CANOPY ? 0.78 + eLevel * 0.04 : 0.30 - eLevel * 0.04
+  // time() is fine here where a running phase would be overkill: the period is
+  // a constant, so there is no live control to jump when it changes.
+  var h = time(28 / 65.535) + zpos * 0.08
   var sat = 1
-  // Green sits where the eye is most sensitive, so it reads brighter than the
-  // purple at the same value — the floor is held low so the mast does not wash
-  // out the canopy it is feeding.
-  var glow = 0.015 + eLevel * 0.08
+  var glow = 0.02 + eLevel * 0.10
   // ---- END PALETTE ----
 
   var v = glow
