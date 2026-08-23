@@ -25,6 +25,8 @@ patterns/
   0_twinkle-bounce/  bands sliding back and forth within each zone
   1_*/           audio-reactive — see below. Nothing in this lane does anything
                  without the streamer running.
+  2_*/           the same pulse mechanism on an internal metronome: a BPM
+                 slider, no audio, nothing to connect.
 docs/
   layout.md   the strip layout, the split idiom, zone intent, power
 tools/
@@ -35,7 +37,8 @@ tools/
 ```
 
 The directory name IS the device-side pattern name. The prefix orders the list
-in the Pixelblaze UI: `0_` is the main set, `1_` is the audio-reactive lane.
+in the Pixelblaze UI: `0_` is the main set, `1_` is the audio-reactive lane, and
+`2_` is the self-driving lane — patterns that need nothing streamed to them.
 
 No `maps/`. Single strip on **Output Expander channel 0**, no pixel map,
 no per-bike geometry.
@@ -150,10 +153,21 @@ quiet track. When it goes to `1` the pattern falls back to a slow internal
 animation rather than going dark — so a lit bike is *not* proof the stream is
 alive.
 
-### The pulse colour variants
+### The pulse family
 
-`1_pulse-ember`, `-ice` and `-toxic` are GENERATED from `patterns/1_pulse/` by
-`tools/gen-variants.mjs`. Only the palette block differs. Edit `1_pulse`, then:
+Eight patterns, one hand-written source. `patterns/1_pulse/pulse.js` is the only
+file anyone edits; `tools/gen-variants.mjs` builds the other seven along two
+axes:
+
+|          | dusk       | ember             | ice             | toxic             |
+|----------|------------|-------------------|-----------------|-------------------|
+| **audio**| `1_pulse` *(source)* | `1_pulse-ember` | `1_pulse-ice` | `1_pulse-toxic` |
+| **bpm**  | `2_pulse`  | `2_pulse-ember`   | `2_pulse-ice`   | `2_pulse-toxic`   |
+
+The **drive** axis is where the beat comes from — streamed audio, or an internal
+metronome with a BPM slider. The **palette** axis is colour. Everything else —
+the travel maths, the bloom, the layout, the rising-edge detection — exists once
+and is shared by all eight. Edit `1_pulse`, then:
 
 ```
 node tools/gen-variants.mjs        # rebuild the variants
@@ -164,6 +178,10 @@ node tools/gen-variants.mjs --check   # fails if any variant is stale
 Run `--check` before pushing. A stale variant means the bike is running a copy
 of a bug that was already fixed in the source — which is the whole failure mode
 hand-copied variants have, and the reason they are generated instead.
+
+⚠️ The `2_` family exports no `beat`, `level` or `idle` at all. It is not audio
+with the sound turned down; there is no stream to lose, so there is nothing for
+it to fall back from.
 
 ## Push to a Pixelblaze
 

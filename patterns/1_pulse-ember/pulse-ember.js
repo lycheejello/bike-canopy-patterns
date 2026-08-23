@@ -1,10 +1,11 @@
 // pulse-ember — banked coals — deep red at rest, opening to orange as it drives.
 //
 // ⚠️ GENERATED FILE — DO NOT EDIT.
-// Built from patterns/1_pulse/pulse.js by tools/gen-variants.mjs. Only the
-// palette block below differs from the source; every other line is shared.
-// Edit the source and re-run the generator; edits here are overwritten and
-// `node tools/gen-variants.mjs --check` will fail on them.
+// Built from patterns/1_pulse/pulse.js by tools/gen-variants.mjs:
+//   drive   audio (streamed over the WebSocket API)
+//   palette ember
+// Everything else is shared with the source. Edit the source and re-run;
+// edits here are overwritten and --check will fail on them.
 //
 // Adapted from pixelblaze-audio/patterns/beat.js, which slams the whole strip
 // bright on each beat and lets it fall. That is the right call for a flat strip
@@ -82,6 +83,30 @@ function zoneAt(index) {
   else { zone = CANOPY; zpos = (i - b2) / max(runLength - b2 - 1, 1) }
 }
 
+// ---- the pulse -------------------------------------------------------
+// `travel` is the wavefront's position: 0 at the seat, 1 at the top of the
+// mast, and beyond 1 while the canopy blooms. It only resets on a NEW beat.
+var travel = 9                  // >1 and past the bloom: nothing in flight at boot
+
+export var travelMs = 280       // seat to canopy
+export function sliderTravel(v) { v = clamp(v, 0, 1); travelMs = 120 + v * 580 }
+
+export var bandWidth = 0.35     // how much of the mast the front covers
+export function sliderWidth(v) { v = clamp(v, 0, 1); bandWidth = 0.08 + v * 0.6 }
+
+export var bloomMs = 420        // canopy fall time after the front arrives
+export function sliderBloom(v) { v = clamp(v, 0, 1); bloomMs = 120 + v * 900 }
+
+
+// ---- BEGIN DRIVE ----
+// ⚠️ EVERYTHING TO THE `END DRIVE` MARKER IS SWAPPED PER FAMILY by
+// tools/gen-variants.mjs. `1_` is driven by streamed audio; `2_` runs off an
+// internal metronome with a BPM slider and no audio at all.
+//
+// A drive block owes the shared mechanism below exactly two things:
+//   * set `travel = 0` at the instant a beat lands
+//   * maintain `eLevel` (0..1), which every palette reads for its colour
+// Anything else it declares is private to that family.
 // ---- audio -----------------------------------------------------------
 // STREAMED IN, not sensed. A browser running the app in pixelblaze-audio runs
 // bass-flux onset detection and pushes these over the Pixelblaze WebSocket API
@@ -123,20 +148,7 @@ var idlePhase = 0
 // track has no kick right now" without guessing from the LEDs.
 export var idle = 0
 
-// ---- the pulse -------------------------------------------------------
-// `travel` is the wavefront's position: 0 at the seat, 1 at the top of the
-// mast, and beyond 1 while the canopy blooms. It only resets on a NEW beat.
-var travel = 9                  // >1 and past the bloom: nothing in flight at boot
-var lastBeat = 0
-
-export var travelMs = 280       // seat to canopy
-export function sliderTravel(v) { v = clamp(v, 0, 1); travelMs = 120 + v * 580 }
-
-export var bandWidth = 0.35     // how much of the mast the front covers
-export function sliderWidth(v) { v = clamp(v, 0, 1); bandWidth = 0.08 + v * 0.6 }
-
-export var bloomMs = 420        // canopy fall time after the front arrives
-export function sliderBloom(v) { v = clamp(v, 0, 1); bloomMs = 120 + v * 900 }
+var lastBeat = 0               // previous frame's `beat`, for edge detection
 
 function driveIdle(delta) {
   eLevel = 0.20 + 0.30 * wave(time(17 / 65.535))
@@ -172,6 +184,7 @@ function drive(delta) {
   if (beat > lastBeat + 0.08) travel = 0
   lastBeat = beat
 }
+// ---- END DRIVE ----
 
 export function beforeRender(delta) {
   layout()
@@ -187,9 +200,8 @@ export function render(index) {
   zoneAt(index)
 
   // ---- palette: ember --------------------------------------------------
-  // This palette is substituted in by tools/gen-variants.mjs. Every other
-  // line of this file is identical to patterns/1_pulse/pulse.js — to change
-  // anything but the colours, edit that and re-run the generator.
+  // This palette is substituted in by tools/gen-variants.mjs; every other
+  // line comes from patterns/1_pulse/pulse.js. Edit that, not this.
   // ---- BEGIN PALETTE ----
   // Deep red at rest, opening toward orange under load. Narrow hue span on
   // purpose: embers read as heat, and a wide sweep would turn them into a
