@@ -18,18 +18,26 @@ pattern source, so it gets normal per-line git history.
 
 ```
 patterns/
-  split-test/ diagnostic: flat colour per zone, with a build pin for the 150/300 A/B
-  breathe/    signature idle: slow whole-bike swell, spine trailing the canopy
-  beacon/     riding: steady ground pool + a comet down the spine
-  drift/      parked: slow hue travel, no event
+  0_split-test/  diagnostic: flat colour per zone, with a build pin for the 150/300 A/B
+  0_breathe/     signature idle: slow whole-bike swell, spine trailing the canopy
+  0_beacon/      riding: steady ground pool + a comet down the spine
+  0_drift/       parked: slow hue travel, no event
+  0_twinkle-bounce/  bands sliding back and forth within each zone
+  1_*/           audio-reactive — see below. Nothing in this lane does anything
+                 without the streamer running.
 docs/
   layout.md   the strip layout, the split idiom, zone intent, power
 tools/
   check-patterns.mjs   run every pattern headless, assert it renders sanely
+  gen-controls.mjs     derive each pattern's controls.json from its own defaults
+  gen-variants.mjs     build the 1_pulse colour variants from 1_pulse
   push-patterns.py     compile + push all patterns to a Pixelblaze over wifi
 ```
 
-No `maps/`. Single strip on the native output, no Output Expander, no pixel map,
+The directory name IS the device-side pattern name. The prefix orders the list
+in the Pixelblaze UI: `0_` is the main set, `1_` is the audio-reactive lane.
+
+No `maps/`. Single strip on **Output Expander channel 0**, no pixel map,
 no per-bike geometry.
 
 ## The layout
@@ -102,14 +110,60 @@ actually is.
 node tools/check-patterns.mjs
 ```
 
-Stubs the Pixelblaze builtins and renders every pattern for ~4s at both 150 and
-300 px, across three zone mixes and both sweep directions, asserting no NaN
-pixels, nothing out of 0..1, that the strip lights at all, that a pinned
-diagnostic goes dark past its own length, and that the diagnostics show four
-distinct zone colours at every build pin. It catches the divide-by-zero you get when a slider
-squeezes a zone down to one pixel. It is not a visual preview — for that, paste
+Stubs the Pixelblaze builtins and renders every pattern for ~5s at both 150 and
+300 px, across three zone mixes and every build pin, asserting no NaN pixels,
+nothing out of 0..1, that the strip lights at all, that a pinned diagnostic goes
+dark past its own length, and that the diagnostics show three distinct zone
+colours. Patterns exposing a flip toggle are swept both ways; the rest have
+nothing to flip. It catches the divide-by-zero you get when a slider squeezes a
+zone down to one pixel.
+
+The `1_` patterns are additionally run against four synthetic stream scenarios —
+no stream, live-but-quiet, music, and full scale — asserting that they react to
+the stream, that the idle fallback engages when it dies and *doesn't* when the
+room is merely quiet, and that no exported name is a near-miss of a wire name.
+That last one matters most: `setVars` matches on name, case included, and
+silently drops the rest, so a pattern spelling a var `treb` is valid JS that
+renders perfectly on the bench and receives nothing on the bike. It is not a visual preview — for that, paste
 into the Pixelblaze web editor, or use pb_emu:
 https://forum.electromage.com/t/pattern-emulator-for-dev-without-hardware/4673
+
+## Audio-reactive patterns (the `1_` lane)
+
+Nothing in this lane senses anything. There is no mic and no Sensor Expansion
+Board. A browser running the app in `pixelblaze-audio` does the FFT and pushes
+`bass` / `mid` / `treble` / `level` / `beat` over the Pixelblaze WebSocket API
+with `setVars` at ~40 Hz, already normalised 0..1 and with the beat already
+detected. A pattern declares the exported vars it reads, and the names must
+match exactly.
+
+Two things catch people out:
+
+- **`setVars` only reaches the ACTIVE pattern.** Sitting in the device's list is
+  not enough. If a `1_` pattern is not the running one it receives nothing.
+- **Gain and beat sensitivity live in the app, not in the patterns.** Tuning
+  them here would only fight the stage upstream.
+
+Every `1_` pattern exports `idle`: `0` means frames are arriving, `1` means
+nothing is. Watch it in the editor's variable list to tell a dead stream from a
+quiet track. When it goes to `1` the pattern falls back to a slow internal
+animation rather than going dark — so a lit bike is *not* proof the stream is
+alive.
+
+### The pulse colour variants
+
+`1_pulse-ember`, `-ice` and `-toxic` are GENERATED from `patterns/1_pulse/` by
+`tools/gen-variants.mjs`. Only the palette block differs. Edit `1_pulse`, then:
+
+```
+node tools/gen-variants.mjs        # rebuild the variants
+node tools/gen-controls.mjs        # they each need their own controls.json
+node tools/gen-variants.mjs --check   # fails if any variant is stale
+```
+
+Run `--check` before pushing. A stale variant means the bike is running a copy
+of a bug that was already fixed in the source — which is the whole failure mode
+hand-copied variants have, and the reason they are generated instead.
 
 ## Push to a Pixelblaze
 

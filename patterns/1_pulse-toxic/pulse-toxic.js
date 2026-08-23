@@ -1,4 +1,10 @@
-// pulse — every kick fires a wavefront up the mast that blooms overhead.
+// pulse-toxic — acid green through to yellow — the loudest of the set.
+//
+// ⚠️ GENERATED FILE — DO NOT EDIT.
+// Built from patterns/1_pulse/pulse.js by tools/gen-variants.mjs. Only the
+// palette block below differs from the source; every other line is shared.
+// Edit the source and re-run the generator; edits here are overwritten and
+// `node tools/gen-variants.mjs --check` will fail on them.
 //
 // Adapted from pixelblaze-audio/patterns/beat.js, which slams the whole strip
 // bright on each beat and lets it fall. That is the right call for a flat strip
@@ -180,18 +186,17 @@ export function beforeRender(delta) {
 export function render(index) {
   zoneAt(index)
 
-  // ---- palette: dusk --------------------------------------------------
-  // ⚠️ EVERYTHING BETWEEN THESE MARKERS IS THE ONLY THING THE COLOUR VARIANTS
-  // CHANGE. tools/gen-variants.mjs reads this file, swaps this block for
-  // another palette and writes patterns/1_pulse-<name>/. Keep the block to
-  // assignments of `h`, `sat` and `glow` from `eLevel` — anything else here
-  // would be silently dropped from every variant.
+  // ---- palette: toxic --------------------------------------------------
+  // This palette is substituted in by tools/gen-variants.mjs. Every other
+  // line of this file is identical to patterns/1_pulse/pulse.js — to change
+  // anything but the colours, edit that and re-run the generator.
   // ---- BEGIN PALETTE ----
-  // Blue when quiet, warm as the music lifts — one hue for every zone, so the
-  // travelling front stays visibly the same event as the bloom it becomes.
-  var h = 0.6 - eLevel * 0.42
+  // Acid green sliding to yellow. Green sits where the eye is most sensitive,
+  // so this reads brighter than the others at the same value — the glow floor
+  // is held lower to compensate rather than letting it wash out.
+  var h = 0.30 - eLevel * 0.13
   var sat = 1
-  var glow = 0.02 + eLevel * 0.10        // resting light between hits
+  var glow = 0.015 + eLevel * 0.08
   // ---- END PALETTE ----
 
   var v = glow
