@@ -1,7 +1,7 @@
 # Strip layout
 
 One Pixelblaze v3 XL per bike, **one continuous WS2815 run on the native output**.
-No Output Expander, no pixel map, no per-bike geometry.
+The strip runs on Output Expander channel 0. No pixel map, no per-bike geometry.
 
 ```
 PB native output

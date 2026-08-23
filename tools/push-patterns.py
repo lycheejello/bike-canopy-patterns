@@ -133,8 +133,12 @@ def discover(want_name=None):
             except Exception:
                 pass
             finally:
+                # ⚠️ The method is _close(), not close(). This was written as
+                # probe.close() inside a bare except, so every probe silently
+                # stayed open and the real connection below then failed with
+                # "connection lost" — a Pixelblaze accepts one websocket at a time.
                 if probe is not None:
-                    try: probe.close()
+                    try: probe._close()
                     except Exception: pass
             found.append((name, ip))
             print(f"  found: {name}  @ {ip}")
@@ -193,10 +197,19 @@ def main():
 
     # Say plainly which device this is before writing to it. chipId is the
     # immutable hardware serial; the name is what you set and what --name matches.
+    #
+    # ⚠️ Report the EXPANDER channel, not the top-level colorOrder. The strip runs
+    # off the Output Expander, so the native-output setting in config is unused —
+    # reading it reports a colour order that has no effect on anything.
     try:
         cfg = pb.getConfigSettings()
+        chans = []
+        for row in (pb.getConfigExpander().get("expanders") or [{}])[0].get("rows", {}).values():
+            for ch in row:
+                if ch.get("count", 0) > 0:
+                    chans.append(f"ch{ch['channel']} {ch['count']}px {ch['options']}")
         print(f"  device: {pb.getDeviceName()!r}  chipId {cfg.get('chipId')}  "
-              f"{cfg.get('pixelCount')} px  colorOrder {cfg.get('colorOrder')}")
+              f"{cfg.get('pixelCount')} px  expander: {', '.join(chans) or 'none'}")
     except Exception as e:
         print(f"  (couldn't read device identity: {e})")
 

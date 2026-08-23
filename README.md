@@ -136,7 +136,9 @@ delete `.venv` and rebuild it, or every command above fails with `bad interprete
 
 ## Device settings that are not pattern code
 
-- **Color order `GRB`** for the WS2815 strip. This is the Pixelblaze default — leave it alone.
+- **Color order `GRB`**, set on the **Output Expander channel**, not the top-level
+  device setting. The strip runs on expander ch0, so the native-output
+  `colorOrder` in the config is unused and reading it is misleading.
 - **WS2815 is 12V.** Strip → 12V, Pixelblaze → 5V via the Mini Buck, grounds common.
   Never power the strip from USB 5V.
 - **LED count** → 150 or 300. This is the knob that picks the build.
