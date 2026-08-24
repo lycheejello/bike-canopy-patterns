@@ -210,6 +210,13 @@ export function beforeRender(delta) {
   layout()
   drive(delta)
   var speed = 1.5 + eLevel * 4 + eBeat * 6
+  // TODO(fixed-point): `phase` accumulates without bound. Pixelblaze arithmetic
+  // is 16.16 fixed point, so at ~1/s this reaches the ±32767 ceiling and wraps
+  // after roughly 9 hours — one visual glitch per overnight run, which is
+  // exactly the run this bike is built for.
+  // Safe to wrap AT 1 here: render() only ever uses `phase` at multiplier 1
+  // (`wave(dc * cycles - phase)`), and wave() is periodic in 1, so
+  // `if (phase >= 1) phase = phase - floor(phase)` is exact.
   phase = phase + delta / 1000 * speed
 }
 

@@ -208,6 +208,11 @@ export function beforeRender(delta) {
   drive(delta)
   // Running phase rather than time() directly, so the speed can vary without the
   // discontinuity you would get from changing a time() period mid-flight.
+  // TODO(fixed-point): `phase` accumulates without bound and wraps at the 16.16
+  // ceiling after roughly 9 hours — one visual glitch per overnight run.
+  // ⚠️ NOT wrappable at 1 the way moire's is. render() uses `phase`, `phase *
+  // 0.6` and `phase * 0.3`, so the wrap period has to leave all three whole or
+  // the second wave visibly jumps; 10 is the smallest that does.
   phase = phase + delta / 1000 * (0.15 + eLevel * 0.9)
 }
 
