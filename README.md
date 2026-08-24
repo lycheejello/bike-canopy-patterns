@@ -32,7 +32,7 @@ docs/
 tools/
   check-patterns.mjs   run every pattern headless, assert it renders sanely
   gen-controls.mjs     derive each pattern's controls.json from its own defaults
-  gen-variants.mjs     build the 1_pulse colour variants from 1_pulse
+  gen-variants.mjs     build the other 9 pulse patterns from 1_pulse (drive × palette)
   push-patterns.py     compile + push all patterns to a Pixelblaze over wifi
 ```
 
