@@ -219,11 +219,25 @@ delete `.venv` and rebuild it, or every command above fails with `bad interprete
 ## Device settings that are not pattern code
 
 - **Color order `GRB`**, set on the **Output Expander channel**, not the top-level
-  device setting. The strip runs on expander ch0, so the native-output
+  device setting. The strip runs on the expander, so the native-output
   `colorOrder` in the config is unused and reading it is misleading.
+  ⚠️ **On a multi-channel build, set it on EVERY channel.** Black briefly ran
+  ch0 `GRB` and ch1 `BGR` after the dense strip went in, which swaps green and
+  blue on the spine and canopy but not the seat. The preview API cannot show
+  this — it returns the logical RGB the pattern produced, before the per-channel
+  remap — so it looks fine everywhere except on the actual LEDs. Run
+  `0_split-test`: the mast must be **cyan**, not yellow.
 - **WS2815 is 12V.** Strip → 12V, Pixelblaze → 5V via the Mini Buck, grounds common.
   Never power the strip from USB 5V.
-- **LED count** → 150 or 300. This is the knob that picks the build.
+- **LED count** is the knob that picks the build, and it must match the wiring:
+
+  | Build | LED count | Wiring |
+  |---|---|---|
+  | uniform | 150 or 300 | one channel |
+  | dense seat | **294** | ch0 = 144 dense @ startIndex 0, ch1 = 150 sparse @ startIndex 144 |
+
+  The channels must be contiguous in index space — the seat/spine boundary is
+  expected to fall exactly on the channel boundary. See `docs/layout.md`.
 
 ## House rules for new patterns
 
