@@ -24,7 +24,7 @@ transition, then out along the canopy, which is the long zone.
 | Share | 10% | 23% | 65% |
 | At 150 px | 15 | 35 | 100 |
 | At 300 px | 30 | 70 | 200 |
-| At 294 px (dense seat) | **144** | 39 | 111 |
+| At 294 px (dense seat) | **144** | 48 | 102 |
 | Motion | Least | Rises — carries the sharper event | Slow, wide, low contrast |
 
 **The spine is vertical.** Motion along it reads as rising or falling, not as
@@ -75,9 +75,16 @@ Two consequences worth knowing:
   flash, because `push-patterns.py` rewrites control positions from
   `controls.json` on every push.
 
-If the dense segment changes length, edit `DENSE_SEAT` / `DENSE_TOTAL` — they sit
-together at the top of `layoutFor()` in every pattern, and the check harness
-sweeps 294 alongside 150 and 300.
+The spine on that build also carries a **`DENSE_SPINE_BONUS` of 9 px**, measured
+off the rebuilt bike. It is a pixel offset rather than a raised `spineFrac`
+because the fractions are shared with the uniform builds: the equivalent
+fraction change would move the 300 px bike's spine by 16 px, and 9 sparse pixels
+is not the same length of bike as 16 dense ones. The two bikes no longer share
+one geometry, and this is where that divergence lives.
+
+If the dense segment changes length, edit `DENSE_SEAT` / `DENSE_TOTAL` /
+`DENSE_SPINE_BONUS` — they sit together at the top of `layoutFor()` in every
+pattern, and the check harness sweeps 294 alongside 150 and 300.
 
 ## The idiom
 

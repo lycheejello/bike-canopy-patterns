@@ -68,6 +68,13 @@ var runLength = 0                // pixels the zones are laid out across
 var DENSE_SEAT = 144
 var DENSE_TOTAL = 294
 
+// ⚠️ Dense build only: the mast measures 9 sparse pixels longer than the shared
+// fractions give it. Applied as a PIXEL offset rather than by raising
+// spineFrac, because the fractions are shared with the uniform builds — the
+// equivalent fraction change would also move the 300 px bike's spine by 16 px,
+// and 9 sparse pixels is not the same length of bike as 16 dense ones.
+var DENSE_SPINE_BONUS = 9
+
 // Lay the zones out across `n` pixels. The diagnostic passes its own pinned
 // build length here; everything else passes the device's pixelCount.
 function layoutFor(n) {
@@ -82,6 +89,7 @@ function layoutFor(n) {
 
   b1 = seatPx
   b2 = b1 + floor(rest * spineFrac / split)
+  if (n == DENSE_TOTAL) b2 = b2 + DENSE_SPINE_BONUS
 
   // Rounding can push a boundary past the end. Clamp forward so they can never
   // invert and hand a negative width to a divide below.
