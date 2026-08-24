@@ -50,13 +50,42 @@ var zone = 0, zpos = 0           // set by zoneAt()
 var b1 = 0, b2 = 0               // seat|spine, spine|canopy
 var runLength = 0                // pixels the zones are laid out across
 
+// ⚠️ MIXED PITCH. On the dense build the seat is a 144 px HIGH-DENSITY strip,
+// so it covers far less of the bike than 144 sparse pixels would. Sizing it as a
+// fraction of the run — which is what every other build does, and what the rest
+// of this file's comments assume — would put the seat/spine boundary metres from
+// where it physically belongs. So on that build the seat is a PIXEL COUNT, and
+// only the spine and canopy, which share one pitch, are still split by fraction.
+//
+// The split is taken over what is LEFT after the seat rather than over the whole
+// run. That is not a special case: it is algebraically identical to the old form
+// on a uniform build, so there is one code path rather than two that can drift.
+//
+// ⚠️ Detected from the pixel count, because the alternative is a per-device
+// control and push-patterns.py rewrites control positions from controls.json on
+// every push — a per-device setting would silently revert on the next flash.
+// The three builds have three distinct counts, so this is unambiguous:
+//   150  uniform          294  144 dense seat + 150 sparse          300  uniform
+//
+// ⚠️ On the dense build sliderSeat does nothing: the seat is physically the
+// dense strip and its length is not ours to choose.
+var DENSE_SEAT = 144
+var DENSE_TOTAL = 294
+
 // Lay the zones out across `n` pixels. The diagnostic passes its own pinned
 // build length here; everything else passes the device's pixelCount.
 function layoutFor(n) {
   runLength = n
-  var total = seatFrac + spineFrac + canopyFrac
-  b1 = floor(n * seatFrac / total)
-  b2 = b1 + floor(n * spineFrac / total)
+
+  var seatPx
+  if (n == DENSE_TOTAL) seatPx = DENSE_SEAT
+  else seatPx = floor(n * seatFrac / (seatFrac + spineFrac + canopyFrac))
+
+  var rest = n - seatPx
+  var split = spineFrac + canopyFrac
+
+  b1 = seatPx
+  b2 = b1 + floor(rest * spineFrac / split)
 
   // Rounding can push a boundary past the end. Clamp forward so they can never
   // invert and hand a negative width to a divide below.

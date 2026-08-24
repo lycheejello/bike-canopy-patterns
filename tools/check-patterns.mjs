@@ -27,7 +27,11 @@ import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..");
-const PIXEL_COUNTS = [150, 300];
+// 150 and 300 are the uniform builds. 294 is the MIXED-PITCH build: a 144 px
+// high-density seat followed by the 150 px sparse run. It is swept here because
+// the seat is sized in pixels rather than by fraction on that build, which is a
+// different path through every pattern's layout.
+const PIXEL_COUNTS = [150, 294, 300];
 // Zone mixes, expressed as UI SLIDER POSITIONS (0..1) and applied through the
 // exported slider functions, because that is the only way the device can change
 // them. `null` leaves the pattern's own defaults alone. The lopsided mixes

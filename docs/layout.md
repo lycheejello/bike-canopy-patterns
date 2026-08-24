@@ -24,6 +24,7 @@ transition, then out along the canopy, which is the long zone.
 | Share | 10% | 23% | 65% |
 | At 150 px | 15 | 35 | 100 |
 | At 300 px | 30 | 70 | 200 |
+| At 294 px (dense seat) | **144** | 39 | 111 |
 | Motion | Least | Rises — carries the sharper event | Slow, wide, low contrast |
 
 **The spine is vertical.** Motion along it reads as rising or falling, not as
@@ -38,16 +39,45 @@ move if the run itself is re-routed.
 There is no seam zone. It was ~2 px at the 150 build, too short to blend
 anything, and it earned its keep nowhere — the spine and canopy meet directly.
 
-## Why nothing is a fixed pixel count
+## Why sizes are fractions — and the one build where the seat is not
 
-The build is not committed to 150 px or 300 px, and the zone proportions are
-still being felt out on a real bike. So no pattern hardcodes a count:
+The build is not committed to a pixel count, and the zone proportions are still
+being felt out on a real bike. So no pattern hardcodes the run length:
 
 - **`pixelCount`** is a Pixelblaze built-in, read from the device's own
-  *Settings → LED count*. Set it to 150 or 300 there and every pattern follows.
-  No source edit, no separate branches.
+  *Settings → LED count*. Set it there and every pattern follows. No source
+  edit, no separate branches.
 - **Zone sizes are normalised fractions** on UI sliders, now set to the measured
   values off the built bike. Drag them if the build changes.
+
+### ⚠️ The mixed-pitch build (294 px)
+
+Fractions work because pitch is uniform: a tenth of the pixels is a tenth of the
+bike. **That stops being true when one segment is denser than the rest.**
+
+The 294 px build puts a **144 px high-density strip at index 0 as the seat**,
+with the existing 150 px sparse run carrying the spine and canopy after it. Those
+144 dense pixels cover far less of the bike than 144 sparse ones would, so sizing
+the seat as a fraction of the run would put the seat/spine boundary metres from
+where it physically belongs.
+
+So on that build the seat is a **pixel count**, not a fraction, and only the
+spine and canopy — which share one pitch — are still split proportionally,
+across what is left after the seat. On a uniform build that is algebraically the
+same as the old formula, so there is one code path rather than two that drift.
+
+Two consequences worth knowing:
+
+- **`sliderSeat` does nothing on the 294 build.** The seat is physically the
+  dense strip; its length is not ours to choose.
+- **The build is detected from `pixelCount`** (150 / 294 / 300 are distinct), not
+  from a control. A per-device control would be silently reverted on the next
+  flash, because `push-patterns.py` rewrites control positions from
+  `controls.json` on every push.
+
+If the dense segment changes length, edit `DENSE_SEAT` / `DENSE_TOTAL` — they sit
+together at the top of `layoutFor()` in every pattern, and the check harness
+sweeps 294 alongside 150 and 300.
 
 ## The idiom
 
@@ -69,7 +99,9 @@ Every pattern opens with this block. Copy it verbatim.
 // canopy.
 //
 // Sizes are fractions of the whole run and are normalised, so the same source
-// runs 150 px and 300 px. Nothing here assumes a pixel count.
+// runs 150 px and 300 px. The one exception is the 294 px mixed-pitch build,
+// where the seat is a fixed 144 px because that segment is denser — see
+// "The mixed-pitch build" above.
 //
 // ⚠️ Every slider clamps its input. The device stores a control position per
 // pattern and hands it back on load, and a stored position can be stale or
